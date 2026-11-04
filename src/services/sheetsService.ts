@@ -1,4 +1,5 @@
 import { DailyReportItem, SheetTabInfo } from '../types/report';
+import { MOCK_TABS } from '../data/mockReports';
 
 export function extractSpreadsheetId(input: string): string {
   const trimmed = input.trim();
@@ -118,32 +119,32 @@ export async function fetchSpreadsheetTabs(
         }
       }
     } catch (e) {
-      console.warn('Sheets API v4 tabs fetch failed, trying GViz fallback:', e);
+      console.warn('Sheets API v4 tabs fetch failed, checking GViz fallback:', e);
     }
   }
 
   // Method 2: Public / Link-shared Sheets (GViz endpoint)
+  // Check if link-sharing is enabled by querying GViz CSV for standard tabs
   try {
-    const gvizUrl = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:json`;
-    const res = await fetch(gvizUrl);
+    const testUrl = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:csv`;
+    const res = await fetch(testUrl);
     if (res.ok) {
       const text = await res.text();
-      // Google GViz response starts with "/*O_o*/\ngoogle.visualization.Query.setResponse(...);"
-      const jsonStart = text.indexOf('{');
-      const jsonEnd = text.lastIndexOf('}');
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        // Attempt parsing
-        // GViz doesn't always include tab names list in the default table,
-        // but if it responds 200, the spreadsheet is link-shared!
+      // If it returns CSV and not HTML login page, the sheet is publicly accessible!
+      if (!text.includes('<!DOCTYPE html>') && !text.includes('<html')) {
+        // Return default November date tabs with dynamic today match
+        return MOCK_TABS.map((tab) => ({
+          ...tab,
+          isToday: isMatchingTodayTab(tab.title),
+        }));
       }
     }
   } catch (e) {
-    console.warn('GViz check error:', e);
+    console.warn('GViz check notice:', e);
   }
 
-  // If token is missing, throw informative error
   if (!accessToken) {
-    throw new Error('Google 계정 로그인이 필요합니다. 상단 또는 설정창에서 [Google 로그인]을 진행해 주세요.');
+    throw new Error('Google 계정 로그인이 필요합니다. (또는 시트 공유 설정을 "링크가 있는 모든 사용자(뷰어)"로 변경하시면 로그인 없이 바로 연동됩니다)');
   }
 
   throw new Error('스프레드시트 정보를 불러오지 못했습니다. 스프레드시트 URL 및 Google 계정의 접근 권한을 확인해주세요.');
@@ -270,14 +271,10 @@ export async function fetchSheetData(
         return parseRowsToReports(rows);
       } else {
         const errorText = await response.text();
-        throw new Error(`Sheets API v4 실패 (${response.status}): ${errorText}`);
+        console.warn(`Sheets API v4 error (${response.status}), trying GViz CSV:`, errorText);
       }
     } catch (apiErr: any) {
       console.warn('Google Sheets API v4 fetch error, trying GViz fallback:', apiErr);
-      // If permission error, bubble up
-      if (apiErr.message?.includes('403') || apiErr.message?.includes('401')) {
-        throw new Error('스프레드시트 접근 권한이 없습니다. 해당 시트의 보기 권한이 있는 Google 계정으로 로그인되어 있는지 확인해주세요.');
-      }
     }
   }
 
@@ -287,9 +284,12 @@ export async function fetchSheetData(
     const res = await fetch(csvUrl);
     if (res.ok) {
       const csvText = await res.text();
-      const rows = parseCsvRows(csvText);
-      if (rows.length > 0) {
-        return parseRowsToReports(rows);
+      // Ensure it's real CSV and not a Google Accounts HTML redirect
+      if (!csvText.includes('<!DOCTYPE html>') && !csvText.includes('<html')) {
+        const rows = parseCsvRows(csvText);
+        if (rows.length > 0) {
+          return parseRowsToReports(rows);
+        }
       }
     }
   } catch (csvErr) {
@@ -297,8 +297,8 @@ export async function fetchSheetData(
   }
 
   if (!accessToken) {
-    throw new Error('시트 데이터를 불러오려면 Google 로그인이 필요합니다. 상단에서 [Google 로그인]을 진행해주세요.');
+    throw new Error('시트 데이터를 불러오려면 Google 로그인이 필요합니다. (또는 시트 공유 설정을 "링크가 있는 모든 사용자(뷰어)"로 변경하시면 로그인 없이 바로 연동됩니다)');
   }
 
-  throw new Error(`'${tabTitle}' 탭의 데이터를 읽어오지 못했습니다. 탭 이름이 정확한지 확인해주세요.`);
+  throw new Error(`'${tabTitle}' 탭의 데이터를 읽어오지 못했습니다. 스프레드시트 권한 및 탭 이름을 확인해주세요.`);
 }

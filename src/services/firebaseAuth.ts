@@ -81,7 +81,16 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Google Sign-in error:', error);
+    console.error('Google Sign-in error details:', error);
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error('브라우저에서 로그인 팝업이 차단되었습니다. 브라우저 주소창 맨 우측의 팝업 차단 아이콘(🚫)을 클릭하여 [항상 허용]을 선택해 주세요.');
+    }
+    if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('로그인 팝업 창이 닫혔습니다. 다시 로그인 버튼을 눌러주세요.');
+    }
+    if (error.code === 'auth/unauthorized-domain') {
+      throw new Error('Firebase 콘솔의 승인된 도메인(Authorized Domains)에 현재 도메인이 등록되지 않았습니다.');
+    }
     throw error;
   } finally {
     isSigningIn = false;

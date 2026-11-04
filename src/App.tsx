@@ -27,7 +27,8 @@ import { TeamCardGrid } from './components/TeamCardGrid';
 import { ReportTable } from './components/ReportTable';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { DetailModal } from './components/DetailModal';
-import { AlertCircle, FileSpreadsheet, RefreshCw, Sun, Moon, Info, LogIn, ExternalLink } from 'lucide-react';
+import { PopupBlockGuideModal } from './components/PopupBlockGuideModal';
+import { AlertCircle, FileSpreadsheet, RefreshCw, Sun, Moon, Info, LogIn, ExternalLink, HelpCircle } from 'lucide-react';
 
 const STORAGE_KEY_SHEET_ID = 'daily_report_spreadsheet_id';
 const STORAGE_KEY_SYNC_SOURCE = 'daily_report_sync_source';
@@ -104,6 +105,8 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  const [showPopupHelp, setShowPopupHelp] = useState(false);
+
   const handleLogin = async () => {
     setIsLoggingIn(true);
     setSyncError(null);
@@ -112,12 +115,17 @@ export default function App() {
       if (result) {
         setUser(result.user);
         setAccessToken(result.accessToken);
+        setShowPopupHelp(false);
         // Automatically sync with newly acquired token
         synchronizeData(result.accessToken);
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setSyncError('Google 로그인에 실패하였습니다. 팝업이 허용되어 있는지 확인해주세요.');
+      const msg = err.message || 'Google 로그인에 실패하였습니다.';
+      setSyncError(msg);
+      if (msg.includes('팝업') || err.code === 'auth/popup-blocked') {
+        setShowPopupHelp(true);
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -164,14 +172,8 @@ export default function App() {
         return;
       }
 
-      if (!activeToken) {
-        setIsSyncing(false);
-        setReports([]);
-        return;
-      }
-
       try {
-        // Fetch tabs from Google Sheets
+        // Fetch tabs from Google Sheets (OAuth token or public/link-shared GViz)
         const fetchedTabs = await fetchSpreadsheetTabs(spreadsheetId, activeToken);
         if (fetchedTabs.length > 0) {
           setTabs(fetchedTabs);
@@ -317,14 +319,23 @@ export default function App() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {!accessToken && (
-                <button
-                  onClick={handleLogin}
-                  disabled={isLoggingIn}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>Google 로그인하기</span>
-                </button>
+                <>
+                  <button
+                    onClick={handleLogin}
+                    disabled={isLoggingIn}
+                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Google 로그인하기</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPopupHelp(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>팝업 차단 해결법</span>
+                  </button>
+                </>
               )}
               <button
                 onClick={() => setIsConfigOpen(true)}
@@ -419,26 +430,43 @@ export default function App() {
             </p>
           </div>
         ) : syncSource === 'google_sheets' && !accessToken && reports.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center my-6 max-w-lg mx-auto shadow-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-10 text-center my-6 max-w-lg mx-auto shadow-sm space-y-4">
             <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 mx-auto flex items-center justify-center">
               <FileSpreadsheet className="w-6 h-6" />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                Google 계정 인증이 필요합니다
+                Google 계정 인증 또는 시트 공유 설정 필요
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                설정하신 스프레드시트의 일일 업무일지 데이터를 안전하게 가져오려면 Google 로그인을 완료해주세요.
+                비공개 스프레드시트의 데이터를 가져오려면 Google 로그인이 필요합니다.
               </p>
             </div>
-            <button
-              onClick={handleLogin}
-              disabled={isLoggingIn}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-all disabled:opacity-60"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>{isLoggingIn ? '로그인 진행 중...' : 'Google 계정으로 로그인하여 동기화'}</span>
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+              <button
+                onClick={handleLogin}
+                disabled={isLoggingIn}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-all disabled:opacity-60"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{isLoggingIn ? '로그인 진행 중...' : 'Google 로그인으로 연동'}</span>
+              </button>
+              <button
+                onClick={() => setShowPopupHelp(true)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-xl border border-amber-200 dark:border-amber-800 transition-colors"
+              >
+                <HelpCircle className="w-4 h-4 text-amber-600" />
+                <span>팝업 차단 해결 가이드</span>
+              </button>
+            </div>
+            <div className="pt-2 text-left bg-emerald-50/70 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
+              <div className="font-semibold flex items-center gap-1 text-emerald-900 dark:text-emerald-200">
+                <span>💡 로그인 팝업 없이 바로 보는 방법:</span>
+              </div>
+              <p className="leading-relaxed">
+                스프레드시트 우측 상단 <strong>[공유]</strong>에서 일반 액세스를 <strong>"링크가 있는 모든 사용자 (뷰어)"</strong>로 설정하시면 로그인/팝업 없이 즉시 실시간 연동됩니다.
+              </p>
+            </div>
           </div>
         ) : viewMode === 'cards' ? (
           <TeamCardGrid
@@ -499,6 +527,13 @@ export default function App() {
         item={detailItem}
         onClose={() => setDetailItem(null)}
         selectedDate={selectedTab}
+      />
+
+      <PopupBlockGuideModal
+        isOpen={showPopupHelp}
+        onClose={() => setShowPopupHelp(false)}
+        onRetryLogin={handleLogin}
+        spreadsheetId={spreadsheetId}
       />
     </div>
   );

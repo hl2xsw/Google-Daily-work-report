@@ -172,9 +172,12 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
               <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
               <span>동기화 권한 및 탭 안내:</span>
             </div>
-            <ul className="list-disc list-inside space-y-0.5 pl-1 leading-relaxed">
+            <ul className="list-disc list-inside space-y-1 pl-1 leading-relaxed">
               <li>
-                비공개 시트는 <strong>해당 시트의 보기 권한이 있는 Google 계정</strong>으로 로그인해야 실시간 동기화됩니다.
+                💡 <strong>로그인 팝업 없이 연동:</strong> 시트 우측 상단 <strong>[공유]</strong>에서 일반 액세스를 <strong>"링크가 있는 모든 사용자 (뷰어)"</strong>로 설정하시면 로그인 없이 바로 연동됩니다.
+              </li>
+              <li>
+                비공개 시트는 <strong>해당 시트의 보기 권한이 있는 Google 계정</strong>으로 로그인해야 실시간 동기화됩니다 (팝업 차단 해제 필요).
               </li>
               <li>
                 시트의 각 날짜 탭 이름은 <strong>"11/03 (화)"</strong>, <strong>"11/04 (수)"</strong> 형식으로 오늘 날짜와 자동 매칭됩니다.
