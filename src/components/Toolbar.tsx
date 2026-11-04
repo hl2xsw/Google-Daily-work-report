@@ -94,6 +94,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     {tab.title} {tab.isToday ? '(오늘)' : ''}
                   </option>
                 ))}
+                {!tabs.some((t) => t.title === selectedTab) && selectedTab && (
+                  <option value={selectedTab}>{selectedTab}</option>
+                )}
               </select>
             </div>
 

@@ -8,14 +8,13 @@ import { User } from 'firebase/auth';
 import {
   initAuth,
   googleSignIn,
-  logout,
-  getAccessToken
+  logout
 } from './services/firebaseAuth';
 import {
   fetchSpreadsheetTabs,
   fetchSheetData,
   isMatchingTodayTab,
-  getTodayTabPattern
+  getTodayFormatted
 } from './services/sheetsService';
 import { exportToExcel, exportToCsv } from './services/exportService';
 import { MOCK_TABS, MOCK_REPORTS_BY_DATE } from './data/mockReports';
@@ -28,7 +27,7 @@ import { TeamCardGrid } from './components/TeamCardGrid';
 import { ReportTable } from './components/ReportTable';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { DetailModal } from './components/DetailModal';
-import { AlertCircle, FileSpreadsheet, RefreshCw, Sun, Moon, Info } from 'lucide-react';
+import { AlertCircle, FileSpreadsheet, RefreshCw, Sun, Moon, Info, LogIn, ExternalLink } from 'lucide-react';
 
 const STORAGE_KEY_SHEET_ID = 'daily_report_spreadsheet_id';
 const STORAGE_KEY_SYNC_SOURCE = 'daily_report_sync_source';
@@ -39,22 +38,37 @@ export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Sheet & Sync Configuration
+  // Dynamic Today Date (e.g. "11/04 (수)")
+  const initialToday = useMemo(() => getTodayFormatted(), []);
+
+  // Sheet & Sync Configuration with safe storage
   const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_SHEET_ID) || '';
+    try {
+      return localStorage.getItem(STORAGE_KEY_SHEET_ID) || '';
+    } catch {
+      return '';
+    }
   });
+
   const [syncSource, setSyncSource] = useState<SyncSource>(() => {
-    return (localStorage.getItem(STORAGE_KEY_SYNC_SOURCE) as SyncSource) || 'demo_data';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SYNC_SOURCE);
+      if (saved === 'google_sheets' || saved === 'demo_data') return saved;
+      return 'google_sheets'; // Default to Google Sheets as requested
+    } catch {
+      return 'google_sheets';
+    }
   });
 
   // Tabs & Reports Data
   const [tabs, setTabs] = useState<SheetTabInfo[]>(MOCK_TABS);
-  const [selectedTab, setSelectedTab] = useState<string>('11/03 (화)');
-  const [todayTabTitle, setTodayTabTitle] = useState<string>('11/03 (화)');
+  const [selectedTab, setSelectedTab] = useState<string>(initialToday.full);
+  const [todayTabTitle, setTodayTabTitle] = useState<string>(initialToday.full);
   const [reports, setReports] = useState<DailyReportItem[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(new Date());
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // Filters & Views
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
@@ -84,7 +98,6 @@ export default function App() {
         setAccessToken(token);
       },
       () => {
-        setUser(null);
         setAccessToken(null);
       }
     );
@@ -99,10 +112,12 @@ export default function App() {
       if (result) {
         setUser(result.user);
         setAccessToken(result.accessToken);
+        // Automatically sync with newly acquired token
+        synchronizeData(result.accessToken);
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setSyncError('Google 로그인에 실패하였습니다. 팝업 차단 여부를 확인해주세요.');
+      setSyncError('Google 로그인에 실패하였습니다. 팝업이 허용되어 있는지 확인해주세요.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -116,71 +131,105 @@ export default function App() {
 
   const handleSaveSpreadsheetId = (id: string) => {
     setSpreadsheetId(id);
-    localStorage.setItem(STORAGE_KEY_SHEET_ID, id);
+    try {
+      localStorage.setItem(STORAGE_KEY_SHEET_ID, id);
+      localStorage.setItem(STORAGE_KEY_SYNC_SOURCE, 'google_sheets');
+    } catch {}
     setSyncSource('google_sheets');
-    localStorage.setItem(STORAGE_KEY_SYNC_SOURCE, 'google_sheets');
+    setSyncError(null);
   };
 
   const handleSwitchSource = (source: SyncSource) => {
     setSyncSource(source);
-    localStorage.setItem(STORAGE_KEY_SYNC_SOURCE, source);
+    try {
+      localStorage.setItem(STORAGE_KEY_SYNC_SOURCE, source);
+    } catch {}
     setSyncError(null);
+    setSyncNotice(null);
   };
 
   // Synchronize Tabs and Report Data
-  const synchronizeData = useCallback(async () => {
+  const synchronizeData = useCallback(async (tokenOverride?: string | null) => {
     setIsSyncing(true);
     setSyncError(null);
+    setSyncNotice(null);
 
-    try {
-      if (syncSource === 'google_sheets' && spreadsheetId && accessToken) {
-        // Fetch real tabs from Google Sheets API
-        const fetchedTabs = await fetchSpreadsheetTabs(spreadsheetId, accessToken);
+    const activeToken = tokenOverride !== undefined ? tokenOverride : accessToken;
+
+    if (syncSource === 'google_sheets') {
+      if (!spreadsheetId) {
+        setIsSyncing(false);
+        setReports([]);
+        setSyncError('연동할 Google Spreadsheet URL 또는 ID를 설정해주세요. 상단의 [시트 설정] 버튼을 클릭하세요.');
+        return;
+      }
+
+      if (!activeToken) {
+        setIsSyncing(false);
+        setReports([]);
+        return;
+      }
+
+      try {
+        // Fetch tabs from Google Sheets
+        const fetchedTabs = await fetchSpreadsheetTabs(spreadsheetId, activeToken);
         if (fetchedTabs.length > 0) {
           setTabs(fetchedTabs);
 
-          // Find today's tab among fetched tabs
+          // Find today's tab dynamically
           const matchedToday = fetchedTabs.find((t) => t.isToday);
-          const activeTodayTitle = matchedToday ? matchedToday.title : fetchedTabs[0].title;
-          setTodayTabTitle(activeTodayTitle);
+          let targetTab: string;
 
-          // If selectedTab is not in fetched tabs, default to today or first tab
-          const targetTab = fetchedTabs.some((t) => t.title === selectedTab)
+          if (matchedToday) {
+            targetTab = matchedToday.title;
+            setTodayTabTitle(matchedToday.title);
+          } else {
+            // If today's tab (e.g. 11/04) is not found, default to most recent matching or first tab
+            const fallbackTab = fetchedTabs.find((t) => t.title.includes('11/03')) || fetchedTabs[0];
+            targetTab = fallbackTab.title;
+            setTodayTabTitle(targetTab);
+            const { full } = getTodayFormatted();
+            setSyncNotice(`시트에 오늘 날짜(${full}) 탭이 아직 등록되지 않아, 가장 최근 일자인 '${targetTab}' 탭의 데이터를 표시합니다.`);
+          }
+
+          // If current selectedTab is already valid in fetchedTabs, keep user choice, else switch to targetTab
+          const finalTabToLoad = (selectedTab && fetchedTabs.some((t) => t.title === selectedTab))
             ? selectedTab
-            : activeTodayTitle;
-          setSelectedTab(targetTab);
+            : targetTab;
 
-          // Fetch rows for the target tab
-          const data = await fetchSheetData(spreadsheetId, targetTab, accessToken);
+          setSelectedTab(finalTabToLoad);
+
+          // Fetch sheet data for that tab
+          const data = await fetchSheetData(spreadsheetId, finalTabToLoad, activeToken);
           setReports(data);
+          setLastSyncedAt(new Date());
         } else {
           throw new Error('스프레드시트에 시트 탭이 존재하지 않습니다.');
         }
-      } else {
-        // Fallback to Rich Mock Dataset matching user's 11월 업무일지 tabs
-        setTabs(MOCK_TABS);
-        const todayMatch = MOCK_TABS.find((t) => t.isToday);
-        const todayTitle = todayMatch ? todayMatch.title : '11/03 (화)';
-        setTodayTabTitle(todayTitle);
-
-        const tabToLoad = selectedTab || todayTitle;
-        const data = MOCK_REPORTS_BY_DATE[tabToLoad] || MOCK_REPORTS_BY_DATE['11/03 (화)'] || [];
-        setReports(data);
+      } catch (err: any) {
+        console.error('Google Sheets sync failed:', err);
+        setReports([]);
+        setSyncError(err.message || 'Google Sheets 데이터를 불러오지 못했습니다.');
+      } finally {
+        setIsSyncing(false);
       }
-      setLastSyncedAt(new Date());
-    } catch (err: any) {
-      console.error('Sync failed:', err);
-      setSyncError(err.message || '데이터를 동기화하는 중 오류가 발생했습니다.');
-      // Keep existing data or load mock as safe fallback
-      if (reports.length === 0) {
-        setReports(MOCK_REPORTS_BY_DATE[selectedTab] || MOCK_REPORTS_BY_DATE['11/03 (화)'] || []);
-      }
-    } finally {
-      setIsSyncing(false);
+      return;
     }
+
+    // Demo Mode: 11월 업무일지 사전 탑재 데이터
+    setTabs(MOCK_TABS);
+    const todayMatch = MOCK_TABS.find((t) => t.isToday);
+    const todayTitle = todayMatch ? todayMatch.title : '11/03 (화)';
+    setTodayTabTitle(todayTitle);
+
+    const tabToLoad = selectedTab || todayTitle;
+    const data = MOCK_REPORTS_BY_DATE[tabToLoad] || MOCK_REPORTS_BY_DATE['11/03 (화)'] || [];
+    setReports(data);
+    setLastSyncedAt(new Date());
+    setIsSyncing(false);
   }, [syncSource, spreadsheetId, accessToken, selectedTab]);
 
-  // Initial load and sync on tab change or token update
+  // Initial load and sync on dependencies update
   useEffect(() => {
     synchronizeData();
   }, [selectedTab, syncSource, spreadsheetId, accessToken]);
@@ -211,7 +260,7 @@ export default function App() {
         if (!hasRemark) return false;
       }
 
-      // Search query filter
+      // Search query filter across all fields including workResult
       if (searchQuery.trim() !== '') {
         const query = searchQuery.toLowerCase().trim();
         const matchAuthor = item.author.toLowerCase().includes(query);
@@ -246,50 +295,71 @@ export default function App() {
       {/* 1. Header Navigation Bar */}
       <Navbar
         user={user}
+        hasAccessToken={!!accessToken}
         onLogin={handleLogin}
         onLogout={handleLogout}
         isLoggingIn={isLoggingIn}
         syncSource={syncSource}
         onOpenSettings={() => setIsConfigOpen(true)}
-        onManualSync={synchronizeData}
+        onManualSync={() => synchronizeData()}
         isSyncing={isSyncing}
         lastSyncedAt={lastSyncedAt}
         spreadsheetId={spreadsheetId}
       />
 
-      {/* 2. Error / Notice Banner */}
+      {/* 2. Error / Action Banner */}
       {syncError && (
-        <div className="bg-rose-50 dark:bg-rose-950/60 border-b border-rose-200 dark:border-rose-900 px-4 py-2.5 text-xs text-rose-800 dark:text-rose-200 flex items-center justify-between no-print">
-          <div className="flex items-center gap-2 max-w-4xl">
-            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-            <span className="font-medium">{syncError}</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {syncSource === 'google_sheets' && !user && (
+        <div className="bg-rose-50 dark:bg-rose-950/60 border-b border-rose-200 dark:border-rose-900 px-4 py-3 text-xs text-rose-800 dark:text-rose-200 no-print">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+              <span className="font-medium">{syncError}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!accessToken && (
+                <button
+                  onClick={handleLogin}
+                  disabled={isLoggingIn}
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Google 로그인하기</span>
+                </button>
+              )}
               <button
-                onClick={handleLogin}
-                className="underline font-bold text-rose-900 dark:text-rose-100 hover:opacity-80"
+                onClick={() => setIsConfigOpen(true)}
+                className="px-2.5 py-1 bg-white dark:bg-slate-900 rounded border border-rose-300 dark:border-rose-800 text-xs font-semibold hover:bg-rose-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
               >
-                Google 로그인하기
+                시트 주소 설정
               </button>
-            )}
-            <button
-              onClick={() => handleSwitchSource('demo_data')}
-              className="px-2 py-1 bg-white dark:bg-slate-900 rounded border border-rose-200 dark:border-rose-800 text-xs font-semibold hover:bg-rose-100"
-            >
-              데모 모드로 전환
-            </button>
+              <button
+                onClick={() => handleSwitchSource('demo_data')}
+                className="px-2.5 py-1 bg-white dark:bg-slate-900 rounded border border-slate-300 dark:border-slate-800 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+              >
+                데모 모드로 전환
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Demo Mode Notice Banner (if in demo mode) */}
+      {/* Notice Banner (e.g. today tab missing fallback) */}
+      {syncNotice && !syncError && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 px-4 py-2 text-xs text-amber-800 dark:text-amber-200 no-print">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+            <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>{syncNotice}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Mode Notice Banner */}
       {syncSource === 'demo_data' && (
         <div className="bg-blue-50/70 dark:bg-blue-950/30 border-b border-blue-100 dark:border-blue-900/40 px-4 py-2 text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between no-print">
-          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
+          <div className="max-w-7xl mx-auto flex items-center gap-2 w-full">
             <Info className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
             <span>
-              현재 <strong>2026년 11월 업무일지</strong> 샘플 데이터가 로드되어 있습니다. 실제 Google Sheets로 동기화하려면 상단의 <strong>[시트 설정]</strong>에서 스프레드시트 URL을 입력하세요.
+              현재 <strong>11월 업무일지 사전 탑재 데모 데이터</strong>가 표시 중입니다. 사용자의 실제 Google Sheets와 연동하려면 상단 <strong>[시트 설정]</strong>에서 URL을 지정하세요.
             </span>
             <button
               onClick={() => setIsConfigOpen(true)}
@@ -340,13 +410,35 @@ export default function App() {
           isRemarksFiltered={onlyRemarks}
         />
 
-        {/* Loading Indicator */}
+        {/* Loading / Content States */}
         {isSyncing ? (
           <div className="py-20 text-center space-y-3">
             <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               {syncSource === 'google_sheets' ? 'Google Sheets 데이터를 불러오는 중...' : '업무보고 데이터를 로딩하는 중...'}
             </p>
+          </div>
+        ) : syncSource === 'google_sheets' && !accessToken && reports.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center my-6 max-w-lg mx-auto shadow-sm space-y-4">
+            <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 mx-auto flex items-center justify-center">
+              <FileSpreadsheet className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Google 계정 인증이 필요합니다
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                설정하신 스프레드시트의 일일 업무일지 데이터를 안전하게 가져오려면 Google 로그인을 완료해주세요.
+              </p>
+            </div>
+            <button
+              onClick={handleLogin}
+              disabled={isLoggingIn}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-all disabled:opacity-60"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>{isLoggingIn ? '로그인 진행 중...' : 'Google 계정으로 로그인하여 동기화'}</span>
+            </button>
           </div>
         ) : viewMode === 'cards' ? (
           <TeamCardGrid
@@ -399,6 +491,7 @@ export default function App() {
         syncSource={syncSource}
         onSwitchSource={handleSwitchSource}
         isLoggedIn={!!user}
+        hasAccessToken={!!accessToken}
         onLogin={handleLogin}
       />
 

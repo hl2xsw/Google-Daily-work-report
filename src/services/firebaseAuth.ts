@@ -5,19 +5,38 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
-  User
+  User,
+  Auth
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
+// Embedded Firebase Client Configuration (ensures GitHub Actions builds without missing file)
+const defaultFirebaseConfig = {
+  projectId: "gen-lang-client-0983271088",
+  appId: "1:379463732338:web:f26c262d7b2d9e1bda06eb",
+  apiKey: "AIzaSyArdl2WIXn4GC_N5fJbkD3blsNUa5DcdaM",
+  authDomain: "gen-lang-client-0983271088.firebaseapp.com",
+  storageBucket: "gen-lang-client-0983271088.firebasestorage.app",
+  messagingSenderId: "379463732338",
+  oAuthClientId: "379463732338-qunsjojirlqncsq7ntk1kg8q9vcgl60r.apps.googleusercontent.com"
+};
 
-const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
-provider.addScope('https://www.googleapis.com/auth/drive.readonly');
-provider.setCustomParameters({
-  prompt: 'select_account',
-});
+let auth: Auth | null = null;
+let provider: GoogleAuthProvider | null = null;
+
+try {
+  const app = !getApps().length ? initializeApp(defaultFirebaseConfig) : getApp();
+  auth = getAuth(app);
+  provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
+  provider.addScope('https://www.googleapis.com/auth/drive.readonly');
+  provider.setCustomParameters({
+    prompt: 'select_account',
+  });
+} catch (err) {
+  console.warn('Firebase initialization notice:', err);
+}
+
+export { auth };
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -26,6 +45,11 @@ export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  if (!auth) {
+    if (onAuthFailure) onAuthFailure();
+    return () => {};
+  }
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
@@ -42,6 +66,10 @@ export const initAuth = (
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (!auth || !provider) {
+    throw new Error('Google 로그인 서비스를 초기화할 수 없습니다.');
+  }
+
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -65,6 +93,8 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const logout = async () => {
-  await signOut(auth);
+  if (auth) {
+    await signOut(auth);
+  }
   cachedAccessToken = null;
 };

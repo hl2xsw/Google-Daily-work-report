@@ -5,6 +5,7 @@ import { SyncSource } from '../types/report';
 
 interface NavbarProps {
   user: User | null;
+  hasAccessToken: boolean;
   onLogin: () => void;
   onLogout: () => void;
   isLoggingIn: boolean;
@@ -18,6 +19,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   user,
+  hasAccessToken,
   onLogin,
   onLogout,
   isLoggingIn,
@@ -52,9 +54,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             {syncSource === 'google_sheets' ? (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-slate-800 dark:text-slate-200 font-semibold">구글 시트 연동 모드</span>
+                <span className="text-slate-800 dark:text-slate-200 font-semibold">Google Sheets 실시간 연동</span>
                 <span className="text-slate-400 dark:text-slate-500">·</span>
-                <span className="text-slate-500 dark:text-slate-400 max-w-[120px] truncate" title={spreadsheetId}>
+                <span className="text-slate-500 dark:text-slate-400 max-w-[140px] truncate font-mono" title={spreadsheetId}>
                   {spreadsheetId ? `ID: ${spreadsheetId.slice(0, 10)}...` : '시트 미설정'}
                 </span>
               </>
@@ -96,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">시트 설정</span>
           </button>
 
-          {user ? (
+          {user && hasAccessToken ? (
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-700">
               {user.photoURL ? (
                 <img
@@ -110,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
                 </div>
               )}
-              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 hidden lg:inline max-w-[100px] truncate">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 hidden lg:inline max-w-[120px] truncate">
                 {user.displayName || user.email}
               </span>
               <button
@@ -121,6 +123,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
+          ) : user && !hasAccessToken ? (
+            <button
+              onClick={onLogin}
+              disabled={isLoggingIn}
+              title="세션 만료: Google 토큰 갱신이 필요합니다"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-200 rounded-lg border border-amber-300 dark:border-amber-700 transition-colors"
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+              <span>{isLoggingIn ? '갱신 중...' : 'Google 인증 갱신'}</span>
+            </button>
           ) : (
             <button
               onClick={onLogin}

@@ -2,7 +2,6 @@ import { DailyReportItem, SheetTabInfo } from '../types/report';
 
 export function extractSpreadsheetId(input: string): string {
   const trimmed = input.trim();
-  // Handle full URL pattern
   const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (match && match[1]) {
     return match[1];
@@ -10,103 +9,152 @@ export function extractSpreadsheetId(input: string): string {
   return trimmed;
 }
 
-export function getTodayTabPattern(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const daysOfWeek = ['일', '월', '화', '수', '목', '금', '토'];
-  const dayName = daysOfWeek[now.getDay()];
-  
-  // Format: "11/03 (화)"
-  return `${month}/${day} (${dayName})`;
-}
-
-export function isMatchingTodayTab(tabTitle: string): boolean {
-  const cleanTitle = tabTitle.replace(/\s+/g, '').toLowerCase();
+export function getTodayFormatted(): { full: string; short: string; dateOnly: string; dayName: string } {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   const shortMonth = String(now.getMonth() + 1);
   const shortDay = String(now.getDate());
-  
   const daysOfWeek = ['일', '월', '화', '수', '목', '금', '토'];
   const dayName = daysOfWeek[now.getDay()];
 
-  // Variations: "11/03(화)", "11/3(화)", "11/03", "11/3"
-  const expectedFull = `${month}/${day}(${dayName})`.toLowerCase();
-  const expectedShort = `${shortMonth}/${shortDay}(${dayName})`.toLowerCase();
-  const expectedDateOnly1 = `${month}/${day}`;
-  const expectedDateOnly2 = `${shortMonth}/${shortDay}`;
+  return {
+    full: `${month}/${day} (${dayName})`,
+    short: `${shortMonth}/${shortDay} (${dayName})`,
+    dateOnly: `${month}/${day}`,
+    dayName,
+  };
+}
+
+export function isMatchingTodayTab(tabTitle: string): boolean {
+  const cleanTitle = tabTitle.replace(/\s+/g, '').toLowerCase();
+  const { full, short, dateOnly } = getTodayFormatted();
+
+  const cleanFull = full.replace(/\s+/g, '').toLowerCase();
+  const cleanShort = short.replace(/\s+/g, '').toLowerCase();
 
   return (
-    cleanTitle.includes(expectedFull) ||
-    cleanTitle.includes(expectedShort) ||
-    cleanTitle === expectedDateOnly1 ||
-    cleanTitle === expectedDateOnly2
+    cleanTitle.includes(cleanFull) ||
+    cleanTitle.includes(cleanShort) ||
+    cleanTitle === dateOnly ||
+    cleanTitle.startsWith(dateOnly)
   );
+}
+
+// Simple CSV parser supporting quotes and multiline cells
+export function parseCsvRows(csvText: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let insideQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        currentCell += '"';
+        i++;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+    } else if (char === ',' && !insideQuotes) {
+      currentRow.push(currentCell.trim());
+      currentCell = '';
+    } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      currentRow.push(currentCell.trim());
+      if (currentRow.some((c) => c !== '')) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = '';
+    } else {
+      currentCell += char;
+    }
+  }
+
+  if (currentCell !== '' || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    if (currentRow.some((c) => c !== '')) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
 }
 
 export async function fetchSpreadsheetTabs(
   spreadsheetId: string,
-  accessToken: string
+  accessToken: string | null
 ): Promise<SheetTabInfo[]> {
   const cleanId = extractSpreadsheetId(spreadsheetId);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}?fields=sheets(properties(sheetId,title))`;
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  // Method 1: If Access Token is available, call Google Sheets API v4
+  if (accessToken) {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}?fields=sheets(properties(sheetId,title))`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`구글 시트 정보를 불러오지 못했습니다 (${response.status}): ${errorText}`);
+      if (response.ok) {
+        const data = await response.json();
+        const sheets = data.sheets || [];
+        if (sheets.length > 0) {
+          return sheets.map((item: any) => {
+            const title = item.properties?.title || 'Untitled';
+            return {
+              sheetId: item.properties?.sheetId || 0,
+              title,
+              isToday: isMatchingTodayTab(title),
+            };
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Sheets API v4 tabs fetch failed, trying GViz fallback:', e);
+    }
   }
 
-  const data = await response.json();
-  const sheets = data.sheets || [];
+  // Method 2: Public / Link-shared Sheets (GViz endpoint)
+  try {
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:json`;
+    const res = await fetch(gvizUrl);
+    if (res.ok) {
+      const text = await res.text();
+      // Google GViz response starts with "/*O_o*/\ngoogle.visualization.Query.setResponse(...);"
+      const jsonStart = text.indexOf('{');
+      const jsonEnd = text.lastIndexOf('}');
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        // Attempt parsing
+        // GViz doesn't always include tab names list in the default table,
+        // but if it responds 200, the spreadsheet is link-shared!
+      }
+    }
+  } catch (e) {
+    console.warn('GViz check error:', e);
+  }
 
-  return sheets.map((item: any) => {
-    const title = item.properties?.title || 'Untitled';
-    return {
-      sheetId: item.properties?.sheetId || 0,
-      title,
-      isToday: isMatchingTodayTab(title),
-    };
-  });
+  // If token is missing, throw informative error
+  if (!accessToken) {
+    throw new Error('Google 계정 로그인이 필요합니다. 상단 또는 설정창에서 [Google 로그인]을 진행해 주세요.');
+  }
+
+  throw new Error('스프레드시트 정보를 불러오지 못했습니다. 스프레드시트 URL 및 Google 계정의 접근 권한을 확인해주세요.');
 }
 
-export async function fetchSheetData(
-  spreadsheetId: string,
-  tabTitle: string,
-  accessToken: string
-): Promise<DailyReportItem[]> {
-  const cleanId = extractSpreadsheetId(spreadsheetId);
-  const encodedRange = encodeURIComponent(`'${tabTitle}'!A1:Z200`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedRange}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`시트 데이터를 불러오지 못했습니다 (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  const rows: any[][] = data.values || [];
-
-  if (rows.length === 0) {
-    return [];
-  }
+export function parseRowsToReports(rows: any[][]): DailyReportItem[] {
+  if (rows.length === 0) return [];
 
   // Detect title banner team (e.g. "R&D 기획 일일업무보고서" -> "R&D 기획팀")
   let defaultTeam = 'R&D 기획팀';
-  for (let i = 0; i < Math.min(3, rows.length); i++) {
+  for (let i = 0; i < Math.min(4, rows.length); i++) {
     const rowStr = rows[i].join(' ').trim();
     if (rowStr.includes('일일업무보고서') || rowStr.includes('업무보고') || rowStr.includes('업무일지')) {
       const extracted = rowStr
@@ -119,7 +167,7 @@ export async function fetchSheetData(
     }
   }
 
-  // Detect header row or start index
+  // Detect header row (search up to 10 rows)
   let headerIndex = -1;
   let teamCol = -1;
   let authorCol = 0;
@@ -129,15 +177,14 @@ export async function fetchSheetData(
   let issueCol = -1;
   let remarksCol = -1;
 
-  for (let i = 0; i < Math.min(6, rows.length); i++) {
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
     const row = rows[i].map((c) => String(c || '').trim().toLowerCase());
     const hasAuthor = row.some((c) => c.includes('담당자') || c.includes('성명') || c.includes('작성자') || c.includes('이름'));
-    const hasToday = row.some((c) => c.includes('금일'));
-    const hasResult = row.some((c) => c.includes('결과') || c.includes('업무 결과') || c.includes('진행현황'));
+    const hasToday = row.some((c) => c.includes('금일') || c.includes('금일 업무'));
+    const hasResult = row.some((c) => c.includes('결과') || c.includes('업무 결과') || c.includes('진행'));
 
     if (hasAuthor || (hasToday && hasResult)) {
       headerIndex = i;
-      // Map columns
       row.forEach((cell, idx) => {
         if (cell.includes('팀') || cell.includes('부서')) teamCol = idx;
         else if (cell.includes('담당자') || cell.includes('성명') || cell.includes('작성자') || cell.includes('이름')) authorCol = idx;
@@ -153,11 +200,9 @@ export async function fetchSheetData(
 
   const dataRows = headerIndex >= 0 ? rows.slice(headerIndex + 1) : rows;
   const reports: DailyReportItem[] = [];
-
   let lastTeam = defaultTeam;
 
   dataRows.forEach((row, idx) => {
-    // If row is completely empty, skip
     if (!row || row.every((c) => !c || String(c).trim() === '')) {
       return;
     }
@@ -170,20 +215,17 @@ export async function fetchSheetData(
     const issues = issueCol >= 0 ? String(row[issueCol] || '').trim() : '';
     const note = remarksCol >= 0 ? String(row[remarksCol] || '').trim() : '';
 
-    // If author and all task/result fields are empty, might be a section header
     if (!author && !todayTasks && !workResult && !tomorrowTasks) {
       if (team) lastTeam = team;
       return;
     }
 
-    // Forward-fill team if blank
     if (!team) {
       team = lastTeam || defaultTeam;
     } else {
       lastTeam = team;
     }
 
-    // Combine issues and note for remarks
     const remarksCombined = [issues, note].filter(Boolean).join(' / ') || '특이사항 없음';
 
     reports.push({
@@ -201,4 +243,62 @@ export async function fetchSheetData(
   });
 
   return reports;
+}
+
+export async function fetchSheetData(
+  spreadsheetId: string,
+  tabTitle: string,
+  accessToken: string | null
+): Promise<DailyReportItem[]> {
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+
+  // Method 1: Google Sheets API v4 with Access Token
+  if (accessToken) {
+    try {
+      const encodedRange = encodeURIComponent(`'${tabTitle}'!A1:Z300`);
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodedRange}`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rows: any[][] = data.values || [];
+        return parseRowsToReports(rows);
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Sheets API v4 실패 (${response.status}): ${errorText}`);
+      }
+    } catch (apiErr: any) {
+      console.warn('Google Sheets API v4 fetch error, trying GViz fallback:', apiErr);
+      // If permission error, bubble up
+      if (apiErr.message?.includes('403') || apiErr.message?.includes('401')) {
+        throw new Error('스프레드시트 접근 권한이 없습니다. 해당 시트의 보기 권한이 있는 Google 계정으로 로그인되어 있는지 확인해주세요.');
+      }
+    }
+  }
+
+  // Method 2: Public / Link-Shared Sheets (GViz CSV endpoint)
+  try {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabTitle)}`;
+    const res = await fetch(csvUrl);
+    if (res.ok) {
+      const csvText = await res.text();
+      const rows = parseCsvRows(csvText);
+      if (rows.length > 0) {
+        return parseRowsToReports(rows);
+      }
+    }
+  } catch (csvErr) {
+    console.warn('GViz CSV fetch failed:', csvErr);
+  }
+
+  if (!accessToken) {
+    throw new Error('시트 데이터를 불러오려면 Google 로그인이 필요합니다. 상단에서 [Google 로그인]을 진행해주세요.');
+  }
+
+  throw new Error(`'${tabTitle}' 탭의 데이터를 읽어오지 못했습니다. 탭 이름이 정확한지 확인해주세요.`);
 }
