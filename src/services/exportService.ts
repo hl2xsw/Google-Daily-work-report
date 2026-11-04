@@ -11,14 +11,15 @@ export function exportToExcel(
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
   const filename = `${filenamePrefix}_${sanitizedDate}_${dateStr}.xlsx`;
 
-  // Format data for Excel
+  // Format data for Excel with 업무 결과
   const excelData = reports.map((item, index) => ({
     'No': index + 1,
     '팀명': item.team,
-    '성명': item.author,
-    '금일 진행 업무': item.todayTasks,
-    '익일 예정 업무': item.tomorrowTasks,
-    '특이사항 / 비고': item.remarks,
+    '담당자': item.author,
+    '금일 업무': item.todayTasks,
+    '업무 결과': item.workResult || '-',
+    '익일 업무': item.tomorrowTasks,
+    '이슈사항 / 비고': item.remarks,
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -26,11 +27,12 @@ export function exportToExcel(
   // Set column widths
   worksheet['!cols'] = [
     { wch: 6 },   // No
-    { wch: 18 },  // 팀명
-    { wch: 14 },  // 성명
-    { wch: 45 },  // 금일 진행 업무
-    { wch: 35 },  // 익일 예정 업무
-    { wch: 30 },  // 특이사항
+    { wch: 16 },  // 팀명
+    { wch: 12 },  // 담당자
+    { wch: 38 },  // 금일 업무
+    { wch: 42 },  // 업무 결과
+    { wch: 38 },  // 익일 업무
+    { wch: 30 },  // 이슈사항 / 비고
   ];
 
   const workbook = XLSX.utils.book_new();
@@ -50,7 +52,7 @@ export function exportToCsv(
   const filename = `${filenamePrefix}_${sanitizedDate}_${dateStr}.csv`;
 
   // UTF-8 BOM for Excel Korean support
-  const headers = ['No', '팀명', '성명', '금일 진행 업무', '익일 예정 업무', '특이사항'];
+  const headers = ['No', '팀명', '담당자', '금일 업무', '업무 결과', '익일 업무', '이슈사항 / 비고'];
   
   const escapeCsvField = (field: string | number) => {
     const stringField = String(field ?? '');
@@ -65,6 +67,7 @@ export function exportToCsv(
     escapeCsvField(item.team),
     escapeCsvField(item.author),
     escapeCsvField(item.todayTasks),
+    escapeCsvField(item.workResult || '-'),
     escapeCsvField(item.tomorrowTasks),
     escapeCsvField(item.remarks),
   ]);

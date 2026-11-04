@@ -1,10 +1,13 @@
 export interface DailyReportItem {
   id: string;
-  team: string;            // 팀명 (예: SW개발 1팀, HW설계팀)
-  author: string;          // 성명 (예: 김철수 팀장, 이진아 책임)
-  todayTasks: string;      // 금일 진행 업무
-  tomorrowTasks: string;   // 익일 예정 업무
-  remarks: string;         // 특이사항 / 비고
+  team: string;            // 팀명 (예: R&D 기획팀, SW개발팀)
+  author: string;          // 담당자 / 성명 (예: 전재민, 최창우)
+  todayTasks: string;      // 금일 업무
+  workResult: string;      // 업무 결과 (신규 추가)
+  tomorrowTasks: string;   // 익일 업무
+  remarks: string;         // 이슈사항 / 비고 (통합 특이사항)
+  issues?: string;         // 세부 이슈사항
+  note?: string;           // 비고
   rawRowIndex?: number;
 }
 

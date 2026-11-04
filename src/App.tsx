@@ -217,10 +217,11 @@ export default function App() {
         const matchAuthor = item.author.toLowerCase().includes(query);
         const matchTeam = item.team.toLowerCase().includes(query);
         const matchToday = item.todayTasks.toLowerCase().includes(query);
+        const matchResult = (item.workResult || '').toLowerCase().includes(query);
         const matchTomorrow = item.tomorrowTasks.toLowerCase().includes(query);
         const matchRemarks = item.remarks.toLowerCase().includes(query);
 
-        return matchAuthor || matchTeam || matchToday || matchTomorrow || matchRemarks;
+        return matchAuthor || matchTeam || matchToday || matchResult || matchTomorrow || matchRemarks;
       }
 
       return true;

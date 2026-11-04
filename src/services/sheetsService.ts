@@ -104,29 +104,48 @@ export async function fetchSheetData(
     return [];
   }
 
+  // Detect title banner team (e.g. "R&D 기획 일일업무보고서" -> "R&D 기획팀")
+  let defaultTeam = 'R&D 기획팀';
+  for (let i = 0; i < Math.min(3, rows.length); i++) {
+    const rowStr = rows[i].join(' ').trim();
+    if (rowStr.includes('일일업무보고서') || rowStr.includes('업무보고') || rowStr.includes('업무일지')) {
+      const extracted = rowStr
+        .replace(/일일업무보고서|일일업무보고|업무일지/g, '')
+        .trim();
+      if (extracted) {
+        defaultTeam = extracted.endsWith('팀') ? extracted : `${extracted}팀`;
+      }
+      break;
+    }
+  }
+
   // Detect header row or start index
   let headerIndex = -1;
-  let teamCol = 0;
-  let authorCol = 1;
-  let todayCol = 2;
+  let teamCol = -1;
+  let authorCol = 0;
+  let todayCol = 1;
+  let resultCol = 2;
   let tomorrowCol = 3;
-  let remarksCol = 4;
+  let issueCol = -1;
+  let remarksCol = -1;
 
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
+  for (let i = 0; i < Math.min(6, rows.length); i++) {
     const row = rows[i].map((c) => String(c || '').trim().toLowerCase());
-    const hasTeam = row.some((c) => c.includes('팀') || c.includes('부서'));
-    const hasAuthor = row.some((c) => c.includes('성명') || c.includes('작성자') || c.includes('담당자') || c.includes('이름'));
-    const hasTasks = row.some((c) => c.includes('업무') || c.includes('내용') || c.includes('금일'));
+    const hasAuthor = row.some((c) => c.includes('담당자') || c.includes('성명') || c.includes('작성자') || c.includes('이름'));
+    const hasToday = row.some((c) => c.includes('금일'));
+    const hasResult = row.some((c) => c.includes('결과') || c.includes('업무 결과') || c.includes('진행현황'));
 
-    if ((hasTeam || hasAuthor) && hasTasks) {
+    if (hasAuthor || (hasToday && hasResult)) {
       headerIndex = i;
       // Map columns
       row.forEach((cell, idx) => {
         if (cell.includes('팀') || cell.includes('부서')) teamCol = idx;
-        else if (cell.includes('성명') || cell.includes('작성자') || cell.includes('담당자') || cell.includes('이름')) authorCol = idx;
-        else if (cell.includes('금일') || (cell.includes('진행') && !cell.includes('익일'))) todayCol = idx;
-        else if (cell.includes('익일') || cell.includes('예정')) tomorrowCol = idx;
-        else if (cell.includes('특이') || cell.includes('비고') || cell.includes('이슈')) remarksCol = idx;
+        else if (cell.includes('담당자') || cell.includes('성명') || cell.includes('작성자') || cell.includes('이름')) authorCol = idx;
+        else if (cell.includes('금일')) todayCol = idx;
+        else if (cell.includes('결과') || cell.includes('실적')) resultCol = idx;
+        else if (cell.includes('익일') || cell.includes('내일') || cell.includes('예정')) tomorrowCol = idx;
+        else if (cell.includes('이슈')) issueCol = idx;
+        else if (cell.includes('특이') || cell.includes('비고')) remarksCol = idx;
       });
       break;
     }
@@ -135,7 +154,7 @@ export async function fetchSheetData(
   const dataRows = headerIndex >= 0 ? rows.slice(headerIndex + 1) : rows;
   const reports: DailyReportItem[] = [];
 
-  let lastTeam = '기타/미지정';
+  let lastTeam = defaultTeam;
 
   dataRows.forEach((row, idx) => {
     // If row is completely empty, skip
@@ -143,32 +162,40 @@ export async function fetchSheetData(
       return;
     }
 
-    let team = String(row[teamCol] || '').trim();
-    const author = String(row[authorCol] || '').trim();
-    const todayTasks = String(row[todayCol] || '').trim();
-    const tomorrowTasks = String(row[tomorrowCol] || '').trim();
-    const remarks = String(row[remarksCol] || '').trim();
+    let team = teamCol >= 0 ? String(row[teamCol] || '').trim() : '';
+    const author = authorCol >= 0 ? String(row[authorCol] || '').trim() : '';
+    const todayTasks = todayCol >= 0 ? String(row[todayCol] || '').trim() : '';
+    const workResult = resultCol >= 0 ? String(row[resultCol] || '').trim() : '';
+    const tomorrowTasks = tomorrowCol >= 0 ? String(row[tomorrowCol] || '').trim() : '';
+    const issues = issueCol >= 0 ? String(row[issueCol] || '').trim() : '';
+    const note = remarksCol >= 0 ? String(row[remarksCol] || '').trim() : '';
 
-    // If author and both task fields are empty, this might be a section header
-    if (!author && !todayTasks && !tomorrowTasks) {
+    // If author and all task/result fields are empty, might be a section header
+    if (!author && !todayTasks && !workResult && !tomorrowTasks) {
       if (team) lastTeam = team;
       return;
     }
 
     // Forward-fill team if blank
     if (!team) {
-      team = lastTeam;
+      team = lastTeam || defaultTeam;
     } else {
       lastTeam = team;
     }
 
+    // Combine issues and note for remarks
+    const remarksCombined = [issues, note].filter(Boolean).join(' / ') || '특이사항 없음';
+
     reports.push({
       id: `sheet-row-${idx + 1}`,
-      team: team || '공통팀',
+      team: team || defaultTeam,
       author: author || '미기재',
-      todayTasks: todayTasks || '작성된 업무 내용 없음',
+      todayTasks: todayTasks || '작성된 금일 업무 없음',
+      workResult: workResult || '-',
       tomorrowTasks: tomorrowTasks || '-',
-      remarks: remarks || '특이사항 없음',
+      remarks: remarksCombined,
+      issues: issues || '',
+      note: note || '',
       rawRowIndex: idx + (headerIndex >= 0 ? headerIndex + 2 : 1),
     });
   });

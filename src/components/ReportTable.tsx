@@ -42,7 +42,7 @@ export const ReportTable: React.FC<ReportTableProps> = ({
 
   const handleCopy = (item: DailyReportItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    const formatted = `[${selectedDate} 일일 업무보고]\n- 부서: ${item.team}\n- 성명: ${item.author}\n- 금일 진행 업무:\n${item.todayTasks}\n- 익일 예정 업무:\n${item.tomorrowTasks}\n- 특이사항:\n${item.remarks}`;
+    const formatted = `[${selectedDate} 일일 업무보고]\n- 부서: ${item.team}\n- 담당자: ${item.author}\n- 금일 업무:\n${item.todayTasks}\n- 업무 결과:\n${item.workResult || '-'}\n- 익일 업무:\n${item.tomorrowTasks}\n- 이슈사항 / 비고:\n${item.remarks}`;
     navigator.clipboard.writeText(formatted);
     setCopiedId(item.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -67,7 +67,7 @@ export const ReportTable: React.FC<ReportTableProps> = ({
               <th className="py-3 px-3.5 w-12 text-center font-mono">No</th>
               <th
                 onClick={() => handleSort('team')}
-                className="py-3 px-4 w-40 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
+                className="py-3 px-4 w-36 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
               >
                 <div className="flex items-center gap-1">
                   <span>팀명</span>
@@ -76,16 +76,19 @@ export const ReportTable: React.FC<ReportTableProps> = ({
               </th>
               <th
                 onClick={() => handleSort('author')}
-                className="py-3 px-4 w-32 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
+                className="py-3 px-4 w-28 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
               >
                 <div className="flex items-center gap-1">
-                  <span>성명</span>
+                  <span>담당자</span>
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
-              <th className="py-3 px-4 min-w-[280px]">금일 진행 업무</th>
-              <th className="py-3 px-4 min-w-[240px]">익일 예정 업무</th>
-              <th className="py-3 px-4 min-w-[200px]">특이사항 / 이슈</th>
+              <th className="py-3 px-4 min-w-[220px]">금일 업무</th>
+              <th className="py-3 px-4 min-w-[250px] bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 font-bold">
+                업무 결과
+              </th>
+              <th className="py-3 px-4 min-w-[220px]">익일 업무</th>
+              <th className="py-3 px-4 min-w-[180px]">이슈사항 / 비고</th>
               <th className="py-3 px-3 w-16 text-center no-print">복사</th>
             </tr>
           </thead>
@@ -113,6 +116,9 @@ export const ReportTable: React.FC<ReportTableProps> = ({
                   </td>
                   <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 leading-relaxed font-normal whitespace-pre-line">
                     {item.todayTasks}
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-900 dark:text-slate-100 leading-relaxed font-normal whitespace-pre-line bg-emerald-50/20 dark:bg-emerald-950/10">
+                    {item.workResult || '-'}
                   </td>
                   <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 leading-relaxed font-normal whitespace-pre-line">
                     {item.tomorrowTasks}

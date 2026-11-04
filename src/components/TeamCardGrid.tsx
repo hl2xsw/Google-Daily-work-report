@@ -6,7 +6,7 @@ import {
   AlertTriangle,
   Building,
   CheckCircle2,
-  Calendar,
+  Award,
   Clock
 } from 'lucide-react';
 import { DailyReportItem } from '../types/report';
@@ -36,7 +36,7 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
 
   const handleCopy = (item: DailyReportItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    const formatted = `[${selectedDate} 일일 업무보고]\n- 부서/팀: ${item.team}\n- 성명: ${item.author}\n\n■ 금일 진행 업무\n${item.todayTasks}\n\n■ 익일 예정 업무\n${item.tomorrowTasks}\n\n■ 특이사항\n${item.remarks}`;
+    const formatted = `[${selectedDate} 일일 업무보고]\n- 부서/팀: ${item.team}\n- 담당자: ${item.author}\n\n■ 금일 업무\n${item.todayTasks}\n\n■ 업무 결과\n${item.workResult || '-'}\n\n■ 익일 업무\n${item.tomorrowTasks}\n\n■ 이슈사항 / 비고\n${item.remarks}`;
     navigator.clipboard.writeText(formatted);
     setCopiedId(item.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -92,7 +92,7 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
                   onClick={() => onOpenDetail(item)}
                   className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
                 >
-                  <div className="space-y-3.5">
+                  <div className="space-y-3">
                     {/* Card Header */}
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
                       <div>
@@ -129,22 +129,33 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
                       </div>
                     </div>
 
-                    {/* Today Tasks */}
+                    {/* 1. 금일 업무 */}
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
                         <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                        <span>금일 진행 업무</span>
+                        <span>금일 업무</span>
                       </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/70 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 whitespace-pre-line line-clamp-4 font-normal">
+                      <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed bg-slate-50/70 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 whitespace-pre-line line-clamp-3 font-normal">
                         {item.todayTasks}
                       </div>
                     </div>
 
-                    {/* Tomorrow Tasks */}
+                    {/* 2. 업무 결과 (신규 추가된 핵심 섹션) */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                        <Award className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>업무 결과</span>
+                      </div>
+                      <div className="text-xs text-emerald-950 dark:text-emerald-100 leading-relaxed bg-emerald-50/60 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200/70 dark:border-emerald-800/50 whitespace-pre-line line-clamp-4 font-normal">
+                        {item.workResult || '-'}
+                      </div>
+                    </div>
+
+                    {/* 3. 익일 업무 */}
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
                         <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
-                        <span>익일 예정 업무</span>
+                        <span>익일 업무</span>
                       </div>
                       <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/70 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 whitespace-pre-line line-clamp-3 font-normal">
                         {item.tomorrowTasks}
@@ -152,19 +163,19 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
                     </div>
                   </div>
 
-                  {/* Remarks Banner */}
+                  {/* 4. 이슈사항 / 비고 Banner */}
                   <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60">
                     {hasRemarks ? (
                       <div className="flex items-start gap-1.5 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 text-xs">
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          <span className="font-semibold block text-[11px] text-amber-700 dark:text-amber-300">특이사항 / 이슈</span>
+                          <span className="font-semibold block text-[11px] text-amber-700 dark:text-amber-300">이슈사항 / 비고</span>
                           <span className="line-clamp-2 leading-relaxed">{item.remarks}</span>
                         </div>
                       </div>
                     ) : (
                       <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-between">
-                        <span>특이사항: 없음</span>
+                        <span>이슈/비고: 없음</span>
                         <span className="text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity font-medium">
                           상세보기 →
                         </span>

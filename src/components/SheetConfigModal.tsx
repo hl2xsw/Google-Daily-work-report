@@ -170,7 +170,7 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                 시트 탭 이름은 <strong>"11/02 (월)"</strong>, <strong>"11/03 (화)"</strong> 형식이어야 오늘 날짜 탭으로 자동 인식됩니다.
               </li>
               <li>
-                열 구조는 <strong>[팀명, 성명, 금일 진행 업무, 익일 예정 업무, 특이사항]</strong> 순서를 기본 지원합니다.
+                열 구조는 <strong>[담당자, 금일 업무, 업무 결과, 익일 업무, 이슈사항, 비고]</strong> 순서를 지원합니다.
               </li>
             </ul>
           </div>
