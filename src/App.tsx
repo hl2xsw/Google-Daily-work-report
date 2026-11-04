@@ -13,12 +13,14 @@ import {
 import {
   fetchSpreadsheetTabs,
   fetchSheetData,
+  fetchMultipleSheetsData,
   isMatchingTodayTab,
-  getTodayFormatted
+  getTodayFormatted,
+  AuthRequiredError
 } from './services/sheetsService';
 import { exportToExcel, exportToCsv } from './services/exportService';
 import { MOCK_TABS, MOCK_REPORTS_BY_DATE } from './data/mockReports';
-import { DailyReportItem, SheetTabInfo, ViewMode, SyncSource } from './types/report';
+import { DailyReportItem, SheetTabInfo, ViewMode, SyncSource, SearchScope } from './types/report';
 
 import { Navbar } from './components/Navbar';
 import { Toolbar } from './components/Toolbar';
@@ -28,7 +30,7 @@ import { ReportTable } from './components/ReportTable';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { DetailModal } from './components/DetailModal';
 import { PopupBlockGuideModal } from './components/PopupBlockGuideModal';
-import { AlertCircle, FileSpreadsheet, RefreshCw, Sun, Moon, Info, LogIn, ExternalLink, HelpCircle } from 'lucide-react';
+import { AlertCircle, FileSpreadsheet, RefreshCw, Sun, Moon, Info, LogIn, ExternalLink, HelpCircle, Layers, CalendarDays } from 'lucide-react';
 
 const STORAGE_KEY_SHEET_ID = 'daily_report_spreadsheet_id';
 const STORAGE_KEY_SYNC_SOURCE = 'daily_report_sync_source';
@@ -66,12 +68,16 @@ export default function App() {
   const [selectedTab, setSelectedTab] = useState<string>(initialToday.full);
   const [todayTabTitle, setTodayTabTitle] = useState<string>(initialToday.full);
   const [reports, setReports] = useState<DailyReportItem[]>([]);
+  const [tabCache, setTabCache] = useState<Record<string, DailyReportItem[]>>({});
+  const [isLoadingAllTabs, setIsLoadingAllTabs] = useState<boolean>(false);
+  const [allTabsProgress, setAllTabsProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // Filters & Views
+  const [searchScope, setSearchScope] = useState<SearchScope>('current');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [onlyRemarks, setOnlyRemarks] = useState<boolean>(false);
@@ -120,7 +126,7 @@ export default function App() {
         synchronizeData(result.accessToken);
       }
     } catch (err: any) {
-      console.error('Login error:', err);
+      console.warn('Login attempt notice:', err);
       const msg = err.message || 'Google 로그인에 실패하였습니다.';
       setSyncError(msg);
       if (msg.includes('팝업') || err.code === 'auth/popup-blocked') {
@@ -204,14 +210,22 @@ export default function App() {
           // Fetch sheet data for that tab
           const data = await fetchSheetData(spreadsheetId, finalTabToLoad, activeToken);
           setReports(data);
+          setTabCache((prev) => ({ ...prev, [finalTabToLoad]: data }));
           setLastSyncedAt(new Date());
         } else {
           throw new Error('스프레드시트에 시트 탭이 존재하지 않습니다.');
         }
       } catch (err: any) {
-        console.error('Google Sheets sync failed:', err);
         setReports([]);
-        setSyncError(err.message || 'Google Sheets 데이터를 불러오지 못했습니다.');
+        if (err instanceof AuthRequiredError || err.name === 'AuthRequiredError' || err.message?.includes('로그인이 필요합니다')) {
+          // Expected unauthenticated state when user has not yet signed in and sheet is private.
+          // Don't show red error banner or throw console.error; central authentication card handles this cleanly!
+          console.info('Google Sheets authentication required:', err.message);
+          setSyncError(null);
+        } else {
+          console.warn('Google Sheets sync notice:', err);
+          setSyncError(err.message || 'Google Sheets 데이터를 불러오지 못했습니다.');
+        }
       } finally {
         setIsSyncing(false);
       }
@@ -227,6 +241,7 @@ export default function App() {
     const tabToLoad = selectedTab || todayTitle;
     const data = MOCK_REPORTS_BY_DATE[tabToLoad] || MOCK_REPORTS_BY_DATE['11/03 (화)'] || [];
     setReports(data);
+    setTabCache((prev) => ({ ...prev, [tabToLoad]: data }));
     setLastSyncedAt(new Date());
     setIsSyncing(false);
   }, [syncSource, spreadsheetId, accessToken, selectedTab]);
@@ -236,18 +251,102 @@ export default function App() {
     synchronizeData();
   }, [selectedTab, syncSource, spreadsheetId, accessToken]);
 
+  // When searchScope is 'all' and Google Sheets mode is active, fetch any remaining uncached tabs in background
+  useEffect(() => {
+    if (searchScope === 'all' && syncSource === 'google_sheets' && spreadsheetId && tabs.length > 0) {
+      const uncachedTabs = tabs
+        .map((t) => t.title)
+        .filter((title) => !tabCache[title]);
+
+      if (uncachedTabs.length > 0 && !isLoadingAllTabs) {
+        setIsLoadingAllTabs(true);
+        fetchMultipleSheetsData(
+          spreadsheetId,
+          uncachedTabs,
+          accessToken,
+          (loaded, total) => {
+            setAllTabsProgress({ loaded, total });
+          }
+        )
+          .then((batchData) => {
+            setTabCache((prev) => ({ ...prev, ...batchData }));
+          })
+          .catch((err) => {
+            console.warn('Batch tabs fetch error:', err);
+          })
+          .finally(() => {
+            setIsLoadingAllTabs(false);
+            setAllTabsProgress(null);
+          });
+      }
+    }
+  }, [searchScope, syncSource, spreadsheetId, tabs, tabCache, accessToken, isLoadingAllTabs]);
+
+  // All Demo Reports aggregated across all dates
+  const allDemoReports = useMemo(() => {
+    const list: DailyReportItem[] = [];
+    Object.entries(MOCK_REPORTS_BY_DATE).forEach(([dateStr, items]) => {
+      items.forEach((item) => {
+        list.push({ ...item, date: item.date || dateStr });
+      });
+    });
+    return list;
+  }, []);
+
+  // Active reports pool based on searchScope
+  const activeReportsPool = useMemo(() => {
+    if (searchScope === 'all') {
+      if (syncSource === 'demo_data') {
+        return allDemoReports;
+      }
+
+      // Google Sheets mode: merge current reports and all tabCache entries
+      const merged: DailyReportItem[] = [];
+      const seen = new Set<string>();
+
+      // Current tab items first
+      reports.forEach((item) => {
+        const itemDate = item.date || selectedTab;
+        const key = `${itemDate}-${item.id}`;
+        if (!seen.has(key)) {
+          merged.push({ ...item, date: itemDate });
+          seen.add(key);
+        }
+      });
+
+      // Other cached tabs
+      Object.entries(tabCache).forEach(([tabName, items]) => {
+        if (tabName !== selectedTab) {
+          items.forEach((item) => {
+            const itemDate = item.date || tabName;
+            const key = `${itemDate}-${item.id}`;
+            if (!seen.has(key)) {
+              merged.push({ ...item, date: itemDate });
+              seen.add(key);
+            }
+          });
+        }
+      });
+
+      return merged;
+    }
+
+    // searchScope === 'current': reports of selected day only
+    return reports.map((r) => ({ ...r, date: r.date || selectedTab }));
+  }, [searchScope, syncSource, allDemoReports, reports, tabCache, selectedTab]);
+
   // Extract unique teams for filtering
   const allTeams = useMemo(() => {
     const set = new Set<string>();
-    reports.forEach((r) => {
+    activeReportsPool.forEach((r) => {
       if (r.team) set.add(r.team);
     });
     return Array.from(set);
-  }, [reports]);
+  }, [activeReportsPool]);
 
   // Filtered reports
   const filteredReports = useMemo(() => {
-    return reports.filter((item) => {
+    return activeReportsPool.filter((item) => {
       // Team filter
       if (selectedTeam !== 'all' && item.team !== selectedTeam) {
         return false;
@@ -262,30 +361,31 @@ export default function App() {
         if (!hasRemark) return false;
       }
 
-      // Search query filter across all fields including workResult
+      // Search query filter across all fields including date, author, team, tasks, result, remarks
       if (searchQuery.trim() !== '') {
         const query = searchQuery.toLowerCase().trim();
-        const matchAuthor = item.author.toLowerCase().includes(query);
-        const matchTeam = item.team.toLowerCase().includes(query);
-        const matchToday = item.todayTasks.toLowerCase().includes(query);
+        const matchAuthor = (item.author || '').toLowerCase().includes(query);
+        const matchTeam = (item.team || '').toLowerCase().includes(query);
+        const matchToday = (item.todayTasks || '').toLowerCase().includes(query);
         const matchResult = (item.workResult || '').toLowerCase().includes(query);
-        const matchTomorrow = item.tomorrowTasks.toLowerCase().includes(query);
-        const matchRemarks = item.remarks.toLowerCase().includes(query);
+        const matchTomorrow = (item.tomorrowTasks || '').toLowerCase().includes(query);
+        const matchRemarks = (item.remarks || '').toLowerCase().includes(query);
+        const matchDate = (item.date || '').toLowerCase().includes(query);
 
-        return matchAuthor || matchTeam || matchToday || matchResult || matchTomorrow || matchRemarks;
+        return matchAuthor || matchTeam || matchToday || matchResult || matchTomorrow || matchRemarks || matchDate;
       }
 
       return true;
     });
-  }, [reports, selectedTeam, onlyRemarks, searchQuery]);
+  }, [activeReportsPool, selectedTeam, onlyRemarks, searchQuery]);
 
   // Export handlers
   const handleExportExcel = () => {
-    exportToExcel(filteredReports, selectedTab);
+    exportToExcel(filteredReports, selectedTab, searchScope === 'all');
   };
 
   const handleExportCsv = () => {
-    exportToCsv(filteredReports, selectedTab);
+    exportToCsv(filteredReports, selectedTab, searchScope === 'all');
   };
 
   const handlePrint = () => {
@@ -392,6 +492,8 @@ export default function App() {
         onSelectTeam={(team) => setSelectedTeam(team)}
         searchQuery={searchQuery}
         onSearchChange={(q) => setSearchQuery(q)}
+        searchScope={searchScope}
+        onSearchScopeChange={(s) => setSearchScope(s)}
         onlyRemarks={onlyRemarks}
         onToggleOnlyRemarks={() => setOnlyRemarks((prev) => !prev)}
         viewMode={viewMode}
@@ -400,7 +502,55 @@ export default function App() {
         onExportCsv={handleExportCsv}
         onPrint={handlePrint}
         todayTabTitle={todayTabTitle}
+        totalFilteredCount={filteredReports.length}
       />
+
+      {/* 3-1. Multi-Day Search Mode Active Banner */}
+      {searchScope === 'all' && (
+        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-purple-950/40 border-b border-blue-200/80 dark:border-blue-900/60 px-4 py-2.5 text-xs text-blue-950 dark:text-blue-200 no-print transition-colors">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-md bg-blue-600 text-white shrink-0">
+                <Layers className="w-3.5 h-3.5" />
+              </span>
+              <span>
+                <strong>전체 일자 통합 검색 모드:</strong> 모든 날짜(전체 탭)의 업무보고 데이터를 검색 및 조회 중입니다.
+                {searchQuery && (
+                  <span className="ml-1.5 text-blue-800 dark:text-blue-300">
+                    · 검색어: <span className="underline font-bold">"{searchQuery}"</span> (총 <strong>{filteredReports.length}</strong>건 발견)
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSearchScope('current')}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors shadow-xs"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                <span>당일 ({selectedTab}) 검색으로 전환</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3-2. Background Multi-Tab Loading Progress */}
+      {isLoadingAllTabs && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/50 px-4 py-2 text-xs text-amber-800 dark:text-amber-200 no-print">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
+              <span>
+                전체 일자 시트 데이터를 백그라운드에서 병합 로딩 중입니다... {allTabsProgress ? `(${allTabsProgress.loaded}/${allTabsProgress.total}개 탭)` : ''}
+              </span>
+            </div>
+            <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+              이미 로드된 일자의 데이터부터 즉시 검색 결과에 반영됩니다
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 4. Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -408,17 +558,18 @@ export default function App() {
         <div className="hidden print:block mb-6 border-b pb-4">
           <div className="text-xl font-bold text-black">팀별 일일 업무보고 종합 보고서</div>
           <div className="text-sm text-gray-600 mt-1">
-            보고 일자: {selectedTab} · 출력 일시: {new Date().toLocaleString('ko-KR')}
+            보고 일자: {searchScope === 'all' ? '전체 일자 통합' : selectedTab} · 출력 일시: {new Date().toLocaleString('ko-KR')}
           </div>
         </div>
 
         {/* Summary Metric Cards */}
         <SummaryCards
           reports={filteredReports}
-          allReportsCount={reports.length}
+          allReportsCount={activeReportsPool.length}
           selectedDate={selectedTab}
           onFilterRemarks={() => setOnlyRemarks((prev) => !prev)}
           isRemarksFiltered={onlyRemarks}
+          searchScope={searchScope}
         />
 
         {/* Loading / Content States */}
@@ -442,7 +593,7 @@ export default function App() {
                 비공개 스프레드시트의 데이터를 가져오려면 Google 로그인이 필요합니다.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
               <button
                 onClick={handleLogin}
                 disabled={isLoggingIn}
@@ -457,6 +608,12 @@ export default function App() {
               >
                 <HelpCircle className="w-4 h-4 text-amber-600" />
                 <span>팝업 차단 해결 가이드</span>
+              </button>
+              <button
+                onClick={() => handleSwitchSource('demo_data')}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors"
+              >
+                <span>데모 데이터로 대시보드 둘러보기</span>
               </button>
             </div>
             <div className="pt-2 text-left bg-emerald-50/70 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
@@ -474,12 +631,14 @@ export default function App() {
             searchQuery={searchQuery}
             onOpenDetail={(item) => setDetailItem(item)}
             selectedDate={selectedTab}
+            searchScope={searchScope}
           />
         ) : (
           <ReportTable
             reports={filteredReports}
             onOpenDetail={(item) => setDetailItem(item)}
             selectedDate={selectedTab}
+            searchScope={searchScope}
           />
         )}
       </main>

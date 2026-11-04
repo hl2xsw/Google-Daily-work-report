@@ -29,6 +29,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     // Real Data directly from User Screenshot (R&D 기획 일일업무보고서)
     {
       id: 'rep-03-real-1',
+      date: '11/03 (화)',
       team: 'R&D 기획팀',
       author: '전재민',
       todayTasks: '1. 사업계획서 작성\n2. NTI 보고서 작성',
@@ -40,6 +41,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-real-2',
+      date: '11/03 (화)',
       team: 'R&D 기획팀',
       author: '최창우',
       todayTasks: '1. DC 그리드 연계~ 과제\n- 배기부 배선 및 팬 구조 구상',
@@ -51,6 +53,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-real-3',
+      date: '11/03 (화)',
       team: 'R&D 기획팀',
       author: '강종귀',
       todayTasks: '1. 항만 자동이송장비 핵심 부품 고도화 기술 개발 과제\n- 450kW 충전기 펌웨어 개발\n- 부하테스트 진행',
@@ -62,6 +65,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-real-4',
+      date: '11/03 (화)',
       team: 'R&D 기획팀',
       author: '임정규',
       todayTasks: '- 표준형 3차 FW 세팅 및 테스트',
@@ -73,6 +77,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-5',
+      date: '11/03 (화)',
       team: 'R&D SW개발1팀',
       author: '김성우 팀장',
       todayTasks: '1. 팀별 일일 업무보고 시스템 구글 시트 연동 검토\n2. 주간 스프린트 태스크 우선순위 조율 및 코드 리뷰',
@@ -82,6 +87,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-6',
+      date: '11/03 (화)',
       team: 'R&D SW개발1팀',
       author: '이진아 선임',
       todayTasks: '1. 대시보드 고밀도 데이터 그리드 및 검색 필터링 최적화\n2. 엑셀 내보내기 시 한글 깨짐 방지 인코딩 적용',
@@ -91,6 +97,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-7',
+      date: '11/03 (화)',
       team: 'R&D SW개발2팀',
       author: '정재훈 팀장',
       todayTasks: '1. 실시간 센서 데이터 스트리밍 프로토콜 2차 PoC 검증\n2. 데이터베이스 인덱스 튜닝 및 느린 쿼리 최적화',
@@ -100,6 +107,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-8',
+      date: '11/03 (화)',
       team: 'AI / 빅데이터 연구팀',
       author: '오승현 팀장',
       todayTasks: '1. 11월 업무보고 자동 요약 모델 경량화 파이프라인 설계\n2. 이상 탐지 모델 v2.1 현장 로그 데이터 학습 완료',
@@ -109,6 +117,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-03-9',
+      date: '11/03 (화)',
       team: 'HW설계 / 회로개발팀',
       author: '송민규 팀장',
       todayTasks: '1. 신규 제어 보드 Rev 1.2 샘플 입고 검수 및 동작 전원 확인\n2. 열화상 카메라를 통한 발열 부품(DC-DC 컨버터) 온도 측정',
@@ -120,6 +129,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
   '11/02 (월)': [
     {
       id: 'rep-02-1',
+      date: '11/02 (월)',
       team: 'R&D 기획팀',
       author: '전재민',
       todayTasks: '1. 11월 R&D 과제 일정 종합 점검\n2. 사업계획서 요구사항 분석',
@@ -129,6 +139,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-02-2',
+      date: '11/02 (월)',
       team: 'R&D 기획팀',
       author: '임정규',
       todayTasks: '1. 표준형 3차 FW 세팅 환경 구성',
@@ -138,6 +149,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-02-3',
+      date: '11/02 (월)',
       team: 'R&D SW개발1팀',
       author: '김성우 팀장',
       todayTasks: '1. 11월 월간 개발 목표 브리핑 및 주간 계획 수립\n2. 시스템 아키텍처 리팩토링 일정 점검',
@@ -149,6 +161,7 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
   '11/04 (수)': [
     {
       id: 'rep-04-1',
+      date: '11/04 (수)',
       team: 'R&D 기획팀',
       author: '전재민',
       todayTasks: '1. 사업계획서 작성\n2. NTI보고자료작성',
@@ -158,11 +171,66 @@ export const MOCK_REPORTS_BY_DATE: Record<string, DailyReportItem[]> = {
     },
     {
       id: 'rep-04-2',
+      date: '11/04 (수)',
       team: 'R&D 기획팀',
       author: '임정규',
       todayTasks: '- 표준형 3차 fw 기반 표준형 2.5차 fw수정\n- HLC FAIL건 적용',
       workResult: '- HLC 통신 에러 패치 및 2.5차 펌웨어 빌드 완료',
       tomorrowTasks: '- 검증 장비에서 최종 회귀 테스트 진행',
+      remarks: '특이사항 없음',
+    },
+    {
+      id: 'rep-04-3',
+      date: '11/04 (수)',
+      team: 'R&D SW개발1팀',
+      author: '이진아 선임',
+      todayTasks: '1. 전체 일자 통합 검색 및 일자별 분리 검색 엔진 구현\n2. 검색 결과 일자 뱃지 및 정렬 UI 연동',
+      workResult: '1. 다중 탭 캐싱 및 일자별 필터 구조 설계 완료\n2. 표/카드 뷰 일자 표시 컴포넌트 추가',
+      tomorrowTasks: '1. 엑셀 내보내기 시 일자 컬럼 연동 검증\n2. 탭 전환 성능 프로파일링',
+      remarks: '특이사항 없음',
+    },
+  ],
+  '11/05 (목)': [
+    {
+      id: 'rep-05-1',
+      date: '11/05 (목)',
+      team: 'R&D 기획팀',
+      author: '최창우',
+      todayTasks: '1. DC 그리드 연계 시제품 배선 조립 및 팬 시험\n2. 협력업체 도면 검토',
+      workResult: '1. 팬 풍량 및 소음 측정 합격\n2. 도면 치수 1건 오차 수정 요청 완료',
+      tomorrowTasks: '1. 전장 조립 2차 프로토타입 조립 착수',
+      remarks: '부품 조달 일정 단축 협의 완료',
+    },
+    {
+      id: 'rep-05-2',
+      date: '11/05 (목)',
+      team: 'R&D SW개발2팀',
+      author: '정재훈 팀장',
+      todayTasks: '1. 펌웨어 3.2 빌드 통합 테스트 환경 세팅\n2. 통신 게이트웨이 부하 테스트',
+      workResult: '1. 빌드 자동화 스크립트 작성 완료\n2. 패킷 드롭률 0% 달성',
+      tomorrowTasks: '1. 펌웨어 3.2 릴리즈 후보(RC) 패키징',
+      remarks: '특이사항 없음',
+    },
+  ],
+  '11/06 (금)': [
+    {
+      id: 'rep-06-1',
+      date: '11/06 (금)',
+      team: 'R&D 기획팀',
+      author: '임정규',
+      todayTasks: '- 26.11.06 secc팀과 합동 테스트 진행\n- HLC FAIL 수정건 현장 검증',
+      workResult: '- secc팀과 통신 테스트 100% 정상 통과\n- 표준형 3차 최종 배포 빌드 완료',
+      tomorrowTasks: '- 차주 릴리즈 노트 작성 및 배포 승인 요청',
+      remarks: 'secc팀 합동 테스트 성공적으로 완료',
+    },
+    {
+      id: 'rep-06-2',
+      date: '11/06 (금)',
+      team: 'AI / 빅데이터 연구팀',
+      author: '오승현 팀장',
+      todayTasks: '1. 모델 서빙 지연시간(Latency) 벤치마크 측정\n2. 주간 연구 성과 보고서 작성',
+      workResult: '1. 평균 추론 시간 45ms 기록 (목표치 달성)\n2. 주간 성과 요약 배포',
+      tomorrowTasks: '1. 차주 현장 실증 테스트 계획 수립',
       remarks: '특이사항 없음',
     },
   ],

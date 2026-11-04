@@ -9,13 +9,14 @@ import {
   Award,
   Clock
 } from 'lucide-react';
-import { DailyReportItem } from '../types/report';
+import { DailyReportItem, SearchScope } from '../types/report';
 
 interface TeamCardGridProps {
   reports: DailyReportItem[];
   searchQuery: string;
   onOpenDetail: (item: DailyReportItem) => void;
   selectedDate: string;
+  searchScope?: SearchScope;
 }
 
 export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
@@ -23,6 +24,7 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
   searchQuery,
   onOpenDetail,
   selectedDate,
+  searchScope = 'current',
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -36,7 +38,8 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
 
   const handleCopy = (item: DailyReportItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    const formatted = `[${selectedDate} 일일 업무보고]\n- 부서/팀: ${item.team}\n- 담당자: ${item.author}\n\n■ 금일 업무\n${item.todayTasks}\n\n■ 업무 결과\n${item.workResult || '-'}\n\n■ 익일 업무\n${item.tomorrowTasks}\n\n■ 이슈사항 / 비고\n${item.remarks}`;
+    const itemDate = item.date || selectedDate;
+    const formatted = `[${itemDate} 일일 업무보고]\n- 부서/팀: ${item.team}\n- 담당자: ${item.author}\n\n■ 금일 업무\n${item.todayTasks}\n\n■ 업무 결과\n${item.workResult || '-'}\n\n■ 익일 업무\n${item.tomorrowTasks}\n\n■ 이슈사항 / 비고\n${item.remarks}`;
     navigator.clipboard.writeText(formatted);
     setCopiedId(item.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -51,8 +54,8 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">일치하는 업무보고가 없습니다</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           {searchQuery
-            ? `'${searchQuery}' 검색 조건에 맞는 항목이 없습니다. 검색어를 변경해 보세요.`
-            : '해당 날짜에 등록된 일일 업무보고 데이터가 없습니다.'}
+            ? `'${searchQuery}' (${searchScope === 'all' ? '전체 일자' : selectedDate}) 검색 조건에 맞는 항목이 없습니다.`
+            : '등록된 일일 업무보고 데이터가 없습니다.'}
         </p>
       </div>
     );
@@ -70,11 +73,11 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
                 {teamName}
               </h2>
               <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
-                ({teamMembers.length}명)
+                ({teamMembers.length}건)
               </span>
             </div>
             <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">
-              {selectedDate}
+              {searchScope === 'all' ? '전체 일자 검색' : selectedDate}
             </div>
           </div>
 
@@ -96,10 +99,17 @@ export const TeamCardGrid: React.FC<TeamCardGridProps> = ({
                     {/* Card Header */}
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {item.author}
-                        </h3>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {item.author}
+                          </h3>
+                          {(searchScope === 'all' || (item.date && item.date !== selectedDate)) && item.date && (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[10px] font-semibold font-mono">
+                              {item.date}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                           {item.team}
                         </p>
                       </div>

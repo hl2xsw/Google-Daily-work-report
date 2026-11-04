@@ -17,8 +17,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({
 
   if (!item) return null;
 
+  const displayDate = item.date || selectedDate;
+
   const handleCopyMarkdown = () => {
-    const text = `### [${selectedDate} 일일 업무보고]\n- **부서/팀**: ${item.team}\n- **담당자**: ${item.author}\n\n#### 1. 금일 업무\n${item.todayTasks}\n\n#### 2. 업무 결과\n${item.workResult || '-'}\n\n#### 3. 익일 업무\n${item.tomorrowTasks}\n\n#### 4. 이슈사항 / 비고\n${item.remarks}`;
+    const text = `### [${displayDate} 일일 업무보고]\n- **부서/팀**: ${item.team}\n- **담당자**: ${item.author}\n\n#### 1. 금일 업무\n${item.todayTasks}\n\n#### 2. 업무 결과\n${item.workResult || '-'}\n\n#### 3. 익일 업무\n${item.tomorrowTasks}\n\n#### 4. 이슈사항 / 비고\n${item.remarks}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -39,7 +41,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               <Building className="w-3.5 h-3.5" />
               <span>{item.team}</span>
               <span className="text-slate-300 dark:text-slate-600">·</span>
-              <span className="text-slate-500 dark:text-slate-400 font-mono">{selectedDate}</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">{displayDate}</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-1 flex items-center gap-2">
               <UserIcon className="w-4 h-4 text-slate-400" />

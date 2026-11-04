@@ -1,23 +1,25 @@
 import React, { useState } from 'react';
-import { DailyReportItem } from '../types/report';
+import { DailyReportItem, SearchScope } from '../types/report';
 import { ArrowUpDown, AlertCircle, Copy, Check } from 'lucide-react';
 
 interface ReportTableProps {
   reports: DailyReportItem[];
   onOpenDetail: (item: DailyReportItem) => void;
   selectedDate: string;
+  searchScope?: SearchScope;
 }
 
 export const ReportTable: React.FC<ReportTableProps> = ({
   reports,
   onOpenDetail,
   selectedDate,
+  searchScope = 'current',
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<'team' | 'author' | 'none'>('none');
+  const [sortField, setSortField] = useState<'date' | 'team' | 'author' | 'none'>('none');
   const [sortAsc, setSortAsc] = useState<boolean>(true);
 
-  const handleSort = (field: 'team' | 'author') => {
+  const handleSort = (field: 'date' | 'team' | 'author') => {
     if (sortField === field) {
       if (sortAsc) setSortAsc(false);
       else {
@@ -30,7 +32,14 @@ export const ReportTable: React.FC<ReportTableProps> = ({
     }
   };
 
+  const showDateColumn = searchScope === 'all' || reports.some(r => r.date && r.date !== selectedDate);
+
   const sortedReports = [...reports].sort((a, b) => {
+    if (sortField === 'date') {
+      const dateA = a.date || selectedDate;
+      const dateB = b.date || selectedDate;
+      return sortAsc ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+    }
     if (sortField === 'team') {
       return sortAsc ? a.team.localeCompare(b.team) : b.team.localeCompare(a.team);
     }
@@ -42,7 +51,8 @@ export const ReportTable: React.FC<ReportTableProps> = ({
 
   const handleCopy = (item: DailyReportItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    const formatted = `[${selectedDate} 일일 업무보고]\n- 부서: ${item.team}\n- 담당자: ${item.author}\n- 금일 업무:\n${item.todayTasks}\n- 업무 결과:\n${item.workResult || '-'}\n- 익일 업무:\n${item.tomorrowTasks}\n- 이슈사항 / 비고:\n${item.remarks}`;
+    const itemDate = item.date || selectedDate;
+    const formatted = `[${itemDate} 일일 업무보고]\n- 부서: ${item.team}\n- 담당자: ${item.author}\n- 금일 업무:\n${item.todayTasks}\n- 업무 결과:\n${item.workResult || '-'}\n- 익일 업무:\n${item.tomorrowTasks}\n- 이슈사항 / 비고:\n${item.remarks}`;
     navigator.clipboard.writeText(formatted);
     setCopiedId(item.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -65,6 +75,17 @@ export const ReportTable: React.FC<ReportTableProps> = ({
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <th className="py-3 px-3.5 w-12 text-center font-mono">No</th>
+              {showDateColumn && (
+                <th
+                  onClick={() => handleSort('date')}
+                  className="py-3 px-3.5 w-24 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>일자</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                  </div>
+                </th>
+              )}
               <th
                 onClick={() => handleSort('team')}
                 className="py-3 px-4 w-36 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
@@ -108,6 +129,13 @@ export const ReportTable: React.FC<ReportTableProps> = ({
                   <td className="py-3.5 px-3.5 text-center font-mono tabular-nums text-slate-400 dark:text-slate-500 text-xs">
                     {index + 1}
                   </td>
+                  {showDateColumn && (
+                    <td className="py-3.5 px-3.5 whitespace-nowrap">
+                      <span className="inline-block px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-semibold font-mono">
+                        {item.date || selectedDate}
+                      </span>
+                    </td>
+                  )}
                   <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                     {item.team}
                   </td>

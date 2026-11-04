@@ -1,6 +1,13 @@
 import { DailyReportItem, SheetTabInfo } from '../types/report';
 import { MOCK_TABS } from '../data/mockReports';
 
+export class AuthRequiredError extends Error {
+  constructor(message = 'Google 계정 로그인이 필요합니다. (또는 시트 공유 설정을 "링크가 있는 모든 사용자(뷰어)"로 변경하시면 로그인 없이 바로 연동됩니다)') {
+    super(message);
+    this.name = 'AuthRequiredError';
+  }
+}
+
 export function extractSpreadsheetId(input: string): string {
   const trimmed = input.trim();
   const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -144,13 +151,13 @@ export async function fetchSpreadsheetTabs(
   }
 
   if (!accessToken) {
-    throw new Error('Google 계정 로그인이 필요합니다. (또는 시트 공유 설정을 "링크가 있는 모든 사용자(뷰어)"로 변경하시면 로그인 없이 바로 연동됩니다)');
+    throw new AuthRequiredError();
   }
 
   throw new Error('스프레드시트 정보를 불러오지 못했습니다. 스프레드시트 URL 및 Google 계정의 접근 권한을 확인해주세요.');
 }
 
-export function parseRowsToReports(rows: any[][]): DailyReportItem[] {
+export function parseRowsToReports(rows: any[][], tabTitle?: string): DailyReportItem[] {
   if (rows.length === 0) return [];
 
   // Detect title banner team (e.g. "R&D 기획 일일업무보고서" -> "R&D 기획팀")
@@ -229,8 +236,11 @@ export function parseRowsToReports(rows: any[][]): DailyReportItem[] {
 
     const remarksCombined = [issues, note].filter(Boolean).join(' / ') || '특이사항 없음';
 
+    const safeTabPrefix = tabTitle ? tabTitle.replace(/[^a-zA-Z0-9가-힣]/g, '') : 'row';
+
     reports.push({
-      id: `sheet-row-${idx + 1}`,
+      id: `sheet-${safeTabPrefix}-${idx + 1}`,
+      date: tabTitle || '',
       team: team || defaultTeam,
       author: author || '미기재',
       todayTasks: todayTasks || '작성된 금일 업무 없음',
@@ -268,7 +278,7 @@ export async function fetchSheetData(
       if (response.ok) {
         const data = await response.json();
         const rows: any[][] = data.values || [];
-        return parseRowsToReports(rows);
+        return parseRowsToReports(rows, tabTitle);
       } else {
         const errorText = await response.text();
         console.warn(`Sheets API v4 error (${response.status}), trying GViz CSV:`, errorText);
@@ -288,7 +298,7 @@ export async function fetchSheetData(
       if (!csvText.includes('<!DOCTYPE html>') && !csvText.includes('<html')) {
         const rows = parseCsvRows(csvText);
         if (rows.length > 0) {
-          return parseRowsToReports(rows);
+          return parseRowsToReports(rows, tabTitle);
         }
       }
     }
@@ -297,8 +307,41 @@ export async function fetchSheetData(
   }
 
   if (!accessToken) {
-    throw new Error('시트 데이터를 불러오려면 Google 로그인이 필요합니다. (또는 시트 공유 설정을 "링크가 있는 모든 사용자(뷰어)"로 변경하시면 로그인 없이 바로 연동됩니다)');
+    throw new AuthRequiredError('시트 데이터를 불러오려면 Google 로그인이 필요합니다. (또는 시트 공유 설정을 "링크가 있는 모든 사용자(뷰어)"로 변경하시면 로그인 없이 바로 연동됩니다)');
   }
 
   throw new Error(`'${tabTitle}' 탭의 데이터를 읽어오지 못했습니다. 스프레드시트 권한 및 탭 이름을 확인해주세요.`);
+}
+
+/**
+ * Fetch reports from multiple sheet tabs with concurrency batching
+ */
+export async function fetchMultipleSheetsData(
+  spreadsheetId: string,
+  tabTitles: string[],
+  accessToken: string | null,
+  onProgress?: (loadedCount: number, total: number) => void
+): Promise<Record<string, DailyReportItem[]>> {
+  const result: Record<string, DailyReportItem[]> = {};
+  const batchSize = 3;
+  let completed = 0;
+
+  for (let i = 0; i < tabTitles.length; i += batchSize) {
+    const batch = tabTitles.slice(i, i + batchSize);
+    const batchPromises = batch.map(async (tabTitle) => {
+      try {
+        const data = await fetchSheetData(spreadsheetId, tabTitle, accessToken);
+        result[tabTitle] = data;
+      } catch (err) {
+        console.warn(`Failed to fetch tab ${tabTitle}:`, err);
+        result[tabTitle] = [];
+      } finally {
+        completed++;
+        if (onProgress) onProgress(completed, tabTitles.length);
+      }
+    });
+    await Promise.all(batchPromises);
+  }
+
+  return result;
 }

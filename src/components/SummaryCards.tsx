@@ -1,6 +1,6 @@
 import React from 'react';
-import { Users, Building2, AlertCircle, CalendarClock } from 'lucide-react';
-import { DailyReportItem } from '../types/report';
+import { Users, Building2, AlertCircle, CalendarClock, Layers } from 'lucide-react';
+import { DailyReportItem, SearchScope } from '../types/report';
 
 interface SummaryCardsProps {
   reports: DailyReportItem[];
@@ -8,6 +8,7 @@ interface SummaryCardsProps {
   selectedDate: string;
   onFilterRemarks?: () => void;
   isRemarksFiltered?: boolean;
+  searchScope?: SearchScope;
 }
 
 export const SummaryCards: React.FC<SummaryCardsProps> = ({
@@ -16,11 +17,15 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
   selectedDate,
   onFilterRemarks,
   isRemarksFiltered,
+  searchScope = 'current',
 }) => {
   // Compute metrics
   const teamsSet = new Set(reports.map((r) => r.team));
   const totalTeams = teamsSet.size;
   const totalMembers = reports.length;
+
+  const datesSet = new Set(reports.map((r) => r.date || selectedDate));
+  const totalDates = datesSet.size;
 
   const remarksList = reports.filter(
     (r) => r.remarks && r.remarks.trim() !== '' && !r.remarks.includes('특이사항 없음')
@@ -36,9 +41,11 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
       {/* Total Members */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs transition-colors">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">보고 인원</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            {searchScope === 'all' ? '전체 일자 보고 건수' : '보고 인원'}
+          </span>
           <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-            <Users className="w-4 h-4" />
+            {searchScope === 'all' ? <Layers className="w-4 h-4" /> : <Users className="w-4 h-4" />}
           </div>
         </div>
         <div className="mt-2 flex items-baseline gap-2">
@@ -46,7 +53,9 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
             {totalMembers}
           </span>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {allReportsCount !== totalMembers ? `/ 전체 ${allReportsCount}명` : '명 작성 완료'}
+            {searchScope === 'all'
+              ? `건 (${totalDates}개 일자)`
+              : allReportsCount !== totalMembers ? `/ 전체 ${allReportsCount}명` : '명 작성 완료'}
           </span>
         </div>
       </div>

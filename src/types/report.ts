@@ -8,6 +8,7 @@ export interface DailyReportItem {
   remarks: string;         // 이슈사항 / 비고 (통합 특이사항)
   issues?: string;         // 세부 이슈사항
   note?: string;           // 비고
+  date?: string;           // 소속 일자 (예: "11/03 (화)")
   rawRowIndex?: number;
 }
 
@@ -21,8 +22,11 @@ export type ViewMode = 'cards' | 'table';
 
 export type SyncSource = 'google_sheets' | 'demo_data';
 
+export type SearchScope = 'current' | 'all';
+
 export interface ReportFilter {
   selectedTeam: string;
   searchQuery: string;
   onlyRemarks: boolean;
+  searchScope: SearchScope;
 }

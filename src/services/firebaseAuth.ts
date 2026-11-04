@@ -81,7 +81,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Google Sign-in error details:', error);
+    console.warn('Google Sign-in notice details:', error);
     if (error.code === 'auth/popup-blocked') {
       throw new Error('브라우저에서 로그인 팝업이 차단되었습니다. 브라우저 주소창 맨 우측의 팝업 차단 아이콘(🚫)을 클릭하여 [항상 허용]을 선택해 주세요.');
     }

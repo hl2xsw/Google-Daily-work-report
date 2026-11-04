@@ -9,9 +9,11 @@ import {
   LayoutGrid,
   Table as TableIcon,
   AlertTriangle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Layers,
+  CalendarDays
 } from 'lucide-react';
-import { SheetTabInfo, ViewMode } from '../types/report';
+import { SheetTabInfo, ViewMode, SearchScope } from '../types/report';
 
 interface ToolbarProps {
   tabs: SheetTabInfo[];
@@ -22,6 +24,8 @@ interface ToolbarProps {
   onSelectTeam: (team: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  searchScope: SearchScope;
+  onSearchScopeChange: (scope: SearchScope) => void;
   onlyRemarks: boolean;
   onToggleOnlyRemarks: () => void;
   viewMode: ViewMode;
@@ -30,6 +34,7 @@ interface ToolbarProps {
   onExportCsv: () => void;
   onPrint: () => void;
   todayTabTitle: string;
+  totalFilteredCount?: number;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -41,6 +46,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onSelectTeam,
   searchQuery,
   onSearchChange,
+  searchScope,
+  onSearchScopeChange,
   onlyRemarks,
   onToggleOnlyRemarks,
   viewMode,
@@ -49,6 +56,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onExportCsv,
   onPrint,
   todayTabTitle,
+  totalFilteredCount,
 }) => {
   const currentIndex = tabs.findIndex((t) => t.title === selectedTab);
   const hasPrev = currentIndex > 0;
@@ -67,11 +75,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       {/* Top Row: Date Navigation & Primary Export Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Date Selector Group */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700">
             <button
               onClick={handlePrev}
-              disabled={!hasPrev}
+              disabled={!hasPrev || searchScope === 'all'}
               title="이전 날짜"
               className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
             >
@@ -81,28 +89,40 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <div className="flex items-center gap-1.5 px-2.5">
               <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <select
-                value={selectedTab}
-                onChange={(e) => onSelectTab(e.target.value)}
+                value={searchScope === 'all' ? '__all__' : selectedTab}
+                onChange={(e) => {
+                  if (e.target.value === '__all__') {
+                    onSearchScopeChange('all');
+                  } else {
+                    onSearchScopeChange('current');
+                    onSelectTab(e.target.value);
+                  }
+                }}
                 className="bg-transparent font-semibold text-sm text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer py-1"
               >
-                {tabs.map((tab) => (
-                  <option
-                    key={tab.title}
-                    value={tab.title}
-                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
-                  >
-                    {tab.title} {tab.isToday ? '(오늘)' : ''}
-                  </option>
-                ))}
-                {!tabs.some((t) => t.title === selectedTab) && selectedTab && (
-                  <option value={selectedTab}>{selectedTab}</option>
-                )}
+                <option value="__all__" className="bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 font-bold">
+                  📁 전체 일자 (모든 날 통합)
+                </option>
+                <optgroup label="개별 일자 선택">
+                  {tabs.map((tab) => (
+                    <option
+                      key={tab.title}
+                      value={tab.title}
+                      className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                    >
+                      {tab.title} {tab.isToday ? '(오늘)' : ''}
+                    </option>
+                  ))}
+                  {!tabs.some((t) => t.title === selectedTab) && selectedTab && selectedTab !== '__all__' && (
+                    <option value={selectedTab}>{selectedTab}</option>
+                  )}
+                </optgroup>
               </select>
             </div>
 
             <button
               onClick={handleNext}
-              disabled={!hasNext}
+              disabled={!hasNext || searchScope === 'all'}
               title="다음 날짜"
               className="p-1.5 rounded text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
             >
@@ -111,13 +131,24 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </div>
 
           {/* Quick "Today" Jump Button */}
-          {todayTabTitle && selectedTab !== todayTabTitle && (
+          {todayTabTitle && (selectedTab !== todayTabTitle || searchScope === 'all') && (
             <button
-              onClick={() => onSelectTab(todayTabTitle)}
+              onClick={() => {
+                onSearchScopeChange('current');
+                onSelectTab(todayTabTitle);
+              }}
               className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 transition-colors border border-blue-200 dark:border-blue-800"
             >
               오늘 ({todayTabTitle})
             </button>
+          )}
+
+          {/* Active Search Scope Indicator */}
+          {searchScope === 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+              <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+              <span>전체 일자 검색 모드 적용 중</span>
+            </span>
           )}
         </div>
 
@@ -153,11 +184,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <div className="flex items-center gap-1">
             <button
               onClick={onExportExcel}
-              title="엑셀 파일 (.xlsx) 다운로드"
+              title={searchScope === 'all' ? '전체 일자 엑셀 (.xlsx) 다운로드' : '선택 일자 엑셀 (.xlsx) 다운로드'}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>엑셀(.xlsx) 내보내기</span>
+              <span>{searchScope === 'all' ? '전체일자 엑셀 내보내기' : '엑셀(.xlsx) 내보내기'}</span>
             </button>
 
             <button
@@ -211,7 +242,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </div>
 
         {/* Search & Only Remarks Filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Isolated Search Scope Toggle: 당일 검색 vs 전체 일자 검색 */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => onSearchScopeChange('current')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${
+                searchScope === 'current'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              title="선택된 특정 일자 내에서만 검색합니다"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>당일 검색</span>
+            </button>
+            <button
+              onClick={() => onSearchScopeChange('all')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${
+                searchScope === 'all'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              title="모든 날짜 / 전체 시트 탭에 걸쳐 통합 검색합니다"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>전체 일자 검색</span>
+            </button>
+          </div>
+
           {/* Remarks Only Toggle */}
           <button
             onClick={onToggleOnlyRemarks}
@@ -226,14 +285,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
 
           {/* Search Box */}
-          <div className="relative min-w-[200px] sm:min-w-[260px]">
+          <div className="relative min-w-[200px] sm:min-w-[270px]">
             <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="작성자, 업무내용, 특이사항 검색..."
+              placeholder={
+                searchScope === 'all'
+                  ? '모든 날짜 통합 검색 (담당자, 업무, 이슈...)'
+                  : `[${selectedTab}] 당일 업무보고 검색...`
+              }
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className={`w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 transition-colors ${
+                searchScope === 'all'
+                  ? 'border-blue-400 dark:border-blue-600 focus:ring-blue-500 ring-1 ring-blue-500/20'
+                  : 'border-slate-200 dark:border-slate-700 focus:ring-blue-500'
+              }`}
             />
             {searchQuery && (
               <button
